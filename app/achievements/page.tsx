@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+export const dynamic = "force-dynamic";
 import { useAuth } from "@/lib/auth-context";
 import { DEMO_ACHIEVEMENTS } from "@/lib/demo-data";
 import { Lock, Star, Trophy, Flame, Award, Zap, Medal, FlaskConical } from "lucide-react";
@@ -9,6 +10,7 @@ const ICONS: Record<string, React.ElementType> = { Star, Trophy, Flame, Award, Z
 
 export default function AchievementsPage() {
   const { user } = useAuth();
+  if (!user) return null;
   const earned = DEMO_ACHIEVEMENTS.filter((a) => a.earned);
 
   return (
