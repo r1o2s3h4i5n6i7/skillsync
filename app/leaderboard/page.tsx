@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
+export const dynamic = "force-dynamic";
 import { DEMO_USERS } from "@/lib/demo-data";
 import { Trophy, Flame, Zap, Star, Crown, Medal, Award } from "lucide-react";
 import Link from "next/link";
@@ -18,6 +19,7 @@ const RANK_STYLES = [
 
 export default function LeaderboardPage() {
   const { user } = useAuth();
+  if (!user) return null;
   const myRank = user ? SORTED_STUDENTS.findIndex((u) => u.id === user.id) + 1 : null;
 
   return (

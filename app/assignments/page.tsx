@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+export const dynamic = "force-dynamic";
 import { useAuth } from "@/lib/auth-context";
 import { DEMO_ASSIGNMENTS, DEMO_COURSES, STUDENT_ENROLLED_IDS } from "@/lib/demo-data";
 import { ClipboardList, CheckCircle2, Clock, AlertCircle, Upload, XCircle } from "lucide-react";
@@ -15,6 +16,7 @@ const STATUS_STYLES: Record<string, { color: string; label: string; icon: React.
 
 export default function AssignmentsPage() {
   const { user } = useAuth();
+  if (!user) return null;
   const [assignments, setAssignments] = useState(DEMO_ASSIGNMENTS);
   const [submitting, setSubmitting] = useState<number | null>(null);
   const [showUpload, setShowUpload] = useState<number | null>(null);

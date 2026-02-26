@@ -16,6 +16,7 @@ const ACH_ICONS: Record<string, React.ElementType> = { Star, Trophy, Flame, Zap 
 
 export default function ProfilePage() {
   const { user } = useAuth();
+  if (!user) return null;
 
   if (!user) {
     return (

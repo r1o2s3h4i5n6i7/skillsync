@@ -28,6 +28,7 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 
 export default function LessonsPage() {
   const { user } = useAuth();
+  if (!user) return null;
   const params = useParams();
   const router = useRouter();
   const courseId = Number(params.courseId);

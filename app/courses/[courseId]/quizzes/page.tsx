@@ -20,6 +20,7 @@ const DIFF_STYLES = {
 
 export default function QuizzesPage() {
   const { user } = useAuth();
+  if (!user) return null;
   const params = useParams();
   const courseId = Number(params.courseId);
   const course = DEMO_COURSES.find((c) => c.id === courseId);

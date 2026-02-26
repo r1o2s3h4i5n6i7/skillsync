@@ -10,6 +10,7 @@ import Link from "next/link";
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
+  if (!user) return null;
   const router = useRouter();
   const [notifications, setNotifications] = useState(true);
   const [emailDigest, setEmailDigest] = useState(false);

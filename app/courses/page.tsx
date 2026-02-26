@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+export const dynamic = "force-dynamic";
 import { useAuth } from "@/lib/auth-context";
 import { DEMO_COURSES, STUDENT_ENROLLED_IDS } from "@/lib/demo-data";
 import { BookOpen, Search, Star, Clock, Users, Play, CheckCircle2, Lock } from "lucide-react";
@@ -13,6 +14,7 @@ const DIFFICULTY_COLORS = { EASY: "from-emerald-400 to-green-500", MEDIUM: "from
 
 export default function CoursesPage() {
   const { user } = useAuth();
+  if (!user) return null;
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [enrolledIds, setEnrolledIds] = useState<number[]>(STUDENT_ENROLLED_IDS);
