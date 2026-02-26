@@ -26,8 +26,8 @@ const ROLE_STYLES = {
 };
 
 function AdminDashboardContent() {
- const { user, loading } = useAuth();
-  if (loading || !user) {
+ const { user } = useAuth();
+  if (!user) {
     return null;
   }
   const searchParams = useSearchParams();
