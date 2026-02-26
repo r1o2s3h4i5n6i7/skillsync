@@ -35,8 +35,12 @@ function ProgressBar({ value, max = 100, color = "brand-gradient" }: { value: nu
 
 function TeacherDashboardContent() {
   const { user } = useAuth();
+  if (!user) {
+    return null;
+  }
   const searchParams = useSearchParams();
-  const tabParam = searchParams.get("tab") as "overview" | "students" | "courses" | null;
+  const tabParam = typeof window !== "undefined"
+  ? (searchParams.get("tab") as "overview" | "students" | "courses" | null) : null;
   const [activeTab, setActiveTab] = useState<"overview" | "students" | "courses">(tabParam ?? "overview");
   const [feedbackStudent, setFeedbackStudent] = useState<StudentPerformance | null>(null);
 
@@ -71,8 +75,8 @@ function TeacherDashboardContent() {
         <div className="relative z-10 flex items-start justify-between gap-4">
           <div>
             <p className="text-white/70 text-sm font-medium">Welcome back,</p>
-            <h1 className="text-2xl sm:text-3xl font-extrabold mt-0.5">{user.name}</h1>
-            <p className="text-white/80 text-sm mt-1">{user.city} · Educator · Level {user.level}</p>
+            <h1 className="text-2xl sm:text-3xl font-extrabold mt-0.5">{user?.name}</h1>
+            <p className="text-white/80 text-sm mt-1">{user?.city} · Educator · Level {user.level}</p>
           </div>
           <div className="bg-white/20 backdrop-blur-sm rounded-xl px-3 py-2 text-center shrink-0">
             <p className="text-xl font-extrabold">{user.streak}</p>
