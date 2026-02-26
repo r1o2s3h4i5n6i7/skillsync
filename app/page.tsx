@@ -54,8 +54,8 @@ export default function LandingPage() {
             <Brain className="w-5 h-5 text-white" />
           </div>
           <span className="text-lg font-extrabold">
-            <span className="brand-gradient-text">INTELLIX</span>
-            <span className="text-foreground">LEARN</span>
+            <span className="brand-gradient-text">SKILL</span>
+            <span className="text-foreground">SYNC</span>
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -117,7 +117,7 @@ export default function LandingPage() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="text-muted-foreground text-lg leading-relaxed mb-8 max-w-xl mx-auto"
           >
-            INTELLIXLEARN is an AI-powered STEM learning platform built for Tamil Nadu students — with gamification, smart quizzes, and personalised pathways.
+            SkillSynx is an AI-powered IT learning platform built for students — with gamification, smart quizzes, and personalised pathways.
           </motion.p>
 
           <motion.div
@@ -225,9 +225,9 @@ export default function LandingPage() {
           <div className="w-7 h-7 brand-gradient rounded-lg flex items-center justify-center shadow-sm">
             <Brain className="w-4 h-4 text-white" />
           </div>
-          <span className="font-extrabold text-sm brand-gradient-text">INTELLIXLEARN</span>
+          <span className="font-extrabold text-sm brand-gradient-text">SkillSynx</span>
         </div>
-        <p className="text-xs text-muted-foreground">AI-Powered STEM Learning Platform · Tamil Nadu, India</p>
+        <p className="text-xs text-muted-foreground">AI-Powered IT Learning Platform · Tamil Nadu, India</p>
       </footer>
     </div>
   );

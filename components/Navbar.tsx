@@ -74,8 +74,8 @@ export default function Navbar() {
           <Brain className="w-5 h-5 text-white" />
         </div>
         <span className="text-lg font-extrabold hidden sm:block">
-          <span className="brand-gradient-text">INTELLIX</span>
-          <span className="text-foreground">LEARN</span>
+          <span className="brand-gradient-text">SKILL</span>
+          <span className="text-foreground">SYNC</span>
         </span>
       </Link>
 

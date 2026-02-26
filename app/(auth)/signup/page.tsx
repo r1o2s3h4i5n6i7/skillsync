@@ -60,8 +60,8 @@ export default function SignUp() {
             <Brain className="w-7 h-7 text-white" />
           </div>
           <div>
-            <span className="text-2xl font-extrabold brand-gradient-text">INTELLIX</span>
-            <span className="text-2xl font-extrabold text-foreground">LEARN</span>
+            <span className="text-2xl font-extrabold brand-gradient-text">SKILL</span>
+            <span className="text-2xl font-extrabold text-foreground">SYNC</span>
           </div>
         </div>
 

@@ -10,7 +10,7 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata = {
-  title: "INTELLIXLEARN – AI-Powered Learning Platform",
+  title: "SkillSynx – AI-Powered Learning Platform",
   description:
     "Gamified STEM learning for students with AI personalization, progress tracking, and interactive assessments.",
 };
