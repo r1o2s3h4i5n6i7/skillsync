@@ -1,38 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
+import { useCourses } from "@/lib/course-context";
+import { Loader } from "@/components/Loader";
+import Image from "next/image";
+import { getAvatarPath } from "@/types/auth";
+import type { StudentDashboardData, AchievementData, DailyActivityData } from "@/types/dashboard";
+import { calculateLevelAndProgress } from "@/lib/level-utils";
 import {
   BookOpen, Flame, Star, Trophy, Zap, Target, TrendingUp,
   ArrowRight, Lock, CheckCircle2, Clock, Play, Plus,
-  Orbit, Award, Medal, FlaskConical
+  Orbit, Award, Medal, FlaskConical, ChevronLeft, ChevronRight
 } from "lucide-react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import {
-  DEMO_ACHIEVEMENTS, DEMO_DAILY_ACTIVITY,
-  DEMO_NOTIFICATIONS,
-  getXpForNextLevel, getXpForCurrentLevel, type DemoAchievement,
-  AI_STUDENT_TIPS
-} from "@/lib/demo-data";
-import { useCourses } from "@/lib/course-context";
-import { useEffect } from "react";
 
 const ACHIEVEMENT_ICONS: Record<string, React.ElementType> = {
-  Star, Trophy, Flame, Award, Zap, FlaskConical, Medal
+  Star, Trophy, Flame, Award, Zap, FlaskConical, Medal, Target, Orbit,
 };
 
 const FADE_UP = {
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.4 }
+  transition: { duration: 0.4 },
 };
 
 const stagger = (i: number) => ({ ...FADE_UP, transition: { ...FADE_UP.transition, delay: i * 0.07 } });
 
-function AchievementBadge({ a, i }: { a: DemoAchievement; i: number }) {
+function AchievementBadge({ a, i }: { a: AchievementData; i: number }) {
   const Icon = ACHIEVEMENT_ICONS[a.icon] || Star;
   return (
     <motion.div
@@ -63,14 +61,43 @@ function AchievementBadge({ a, i }: { a: DemoAchievement; i: number }) {
   );
 }
 
+
 function StudentDashboardContent() {
   const { user } = useAuth();
-  const { courses: DEMO_COURSES, enrolledIds, enrollCourse } = useCourses();
+  const { courses, enrolledIds, enrollCourse, isLoading: coursesLoading } = useCourses();
   const [showEnroll, setShowEnroll] = useState(false);
+  const [dashboardData, setDashboardData] = useState<StudentDashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // My Courses Pagination
+  const [coursePage, setCoursePage] = useState(1);
+  const coursesPerPage = 3;
+
+  const fetchDashboard = useCallback(async () => {
+    try {
+      const res = await fetch("/api/dashboard/student");
+      if (res.ok) {
+        const data: StudentDashboardData = await res.json();
+        setDashboardData(data);
+      }
+    } catch (err) {
+      console.error("Dashboard fetch error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    // Local state/sync logic if any
-  }, []);
+    if (user) {
+      fetchDashboard();
+      
+      const interval = setInterval(() => {
+        fetchDashboard();
+      }, 60000); // Check every minute
+      
+      return () => clearInterval(interval);
+    }
+  }, [user, fetchDashboard]);
 
   if (!user) {
     return (
@@ -85,12 +112,29 @@ function StudentDashboardContent() {
     );
   }
 
-  const enrolledCourses = DEMO_COURSES.filter((c) => enrolledIds.includes(c.id));
-  const availableCourses = DEMO_COURSES.filter((c) => !enrolledIds.includes(c.id));
-  const currentXp = user.xp;
-  const xpForCurrent = getXpForCurrentLevel(user.level);
-  const xpForNext = getXpForNextLevel(user.level);
-  const xpProgress = Math.round(((currentXp - xpForCurrent) / (xpForNext - xpForCurrent)) * 100);
+  if (isLoading || coursesLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <Loader size="lg" />
+        <p className="text-sm text-muted-foreground font-medium">Loading your dashboard...</p>
+      </div>
+    );
+  }
+
+  const enrolledCourses = courses.filter((c) => enrolledIds.includes(c.id));
+  const availableCourses = courses.filter((c) => !enrolledIds.includes(c.id));
+
+  // Client-side pagination for enrolled courses
+  const totalCoursePages = Math.ceil(enrolledCourses.length / coursesPerPage);
+  const paginatedCourses = enrolledCourses.slice((coursePage - 1) * coursesPerPage, coursePage * coursesPerPage);
+  
+  const stats = dashboardData?.stats;
+  const currentXp = stats?.xp ?? user.xp;
+  
+  const { level: computedLevel, xpRequiredForCurrentLevel, totalXpForNextLevel, progressPercentage } = calculateLevelAndProgress(currentXp);
+
+  const achievements = dashboardData?.achievements ?? [];
+  const dailyActivity = dashboardData?.dailyActivity ?? [];
 
   const handleEnroll = (courseId: number, courseTitle: string) => {
     enrollCourse(courseId);
@@ -115,10 +159,19 @@ function StudentDashboardContent() {
       <motion.div {...FADE_UP} className="relative overflow-hidden brand-gradient rounded-[2rem] p-8 text-white shadow-xl shadow-pink-500/20">
         <div className="relative z-10">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-white/70 text-sm font-medium">Welcome back,</p>
-              <h1 className="text-2xl sm:text-3xl font-extrabold mt-0.5">{user.name.split(" ")[0]} 👋</h1>
-              <p className="text-white/80 text-sm mt-1">{user.city} · Keep up the great work!</p>
+            <div className="flex items-center gap-4">
+              <Image
+                src={getAvatarPath(user.role)}
+                alt="Student avatar"
+                width={56}
+                height={56}
+                className="w-14 h-14 rounded-2xl object-cover shadow-lg border-2 border-white/30"
+              />
+              <div>
+                <p className="text-white/70 text-sm font-medium">Welcome back,</p>
+                <h1 className="text-2xl sm:text-3xl font-extrabold mt-0.5">{user.name.split(" ")[0]} 👋</h1>
+                <p className="text-white/80 text-sm mt-1">{user.city} · Keep up the great work!</p>
+              </div>
             </div>
             <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-xl px-3 py-2">
               <Flame className="w-5 h-5 text-orange-300" />
@@ -131,18 +184,18 @@ function StudentDashboardContent() {
           {/* XP progress bar */}
           <div className="mt-5">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs text-white/70 font-medium">Level {user.level}</span>
-              <span className="text-xs text-white/70">{currentXp.toLocaleString()} / {xpForNext.toLocaleString()} XP</span>
+              <span className="text-xs text-white/70 font-medium">Level {computedLevel}</span>
+              <span className="text-xs text-white/70">{currentXp.toLocaleString()} / {totalXpForNextLevel.toLocaleString()} XP</span>
             </div>
-            <div className="h-2.5 bg-white/20 rounded-full overflow-hidden">
+            <div className="h-2.5 bg-white/20 rounded-full overflow-hidden relative">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${xpProgress}%` }}
+                animate={{ width: `${progressPercentage}%` }}
                 transition={{ duration: 1.2, ease: "easeOut", delay: 0.3 }}
-                className="h-full bg-white rounded-full"
+                className="h-full bg-white rounded-full relative z-10"
               />
             </div>
-            <p className="text-[10px] text-white/60 mt-1">{xpForNext - currentXp} XP to Level {user.level + 1}</p>
+            <p className="text-[10px] text-white/60 mt-1">{Math.max(0, totalXpForNextLevel - currentXp)} XP to Level {computedLevel + 1}</p>
           </div>
         </div>
         {/* Decorative circles */}
@@ -153,10 +206,10 @@ function StudentDashboardContent() {
       {/* Stats grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Enrolled", value: enrolledCourses.length, icon: BookOpen, color: "from-pink-500 to-rose-600" },
-          { label: "Completed", value: enrolledCourses.filter(c => c.status === "COMPLETED").length, icon: CheckCircle2, color: "from-emerald-400 to-green-500" },
-          { label: "XP Earned", value: `${(user.xp / 1000).toFixed(1)}k`, icon: Zap, color: "from-amber-400 to-orange-500" },
-          { label: "Coins", value: user.coins, icon: Star, color: "from-blue-400 to-cyan-500" },
+          { label: "Enrolled", value: stats?.totalEnrollments ?? enrolledCourses.length, icon: BookOpen, color: "from-pink-500 to-rose-600" },
+          { label: "Completed", value: stats?.completedCourses ?? 0, icon: CheckCircle2, color: "from-emerald-400 to-green-500" },
+          { label: "XP Earned", value: `${((stats?.xp ?? user.xp) / 1000).toFixed(1)}k`, icon: Zap, color: "from-amber-400 to-orange-500" },
+          { label: "Coins", value: stats?.coins ?? user.coins, icon: Star, color: "from-blue-400 to-cyan-500" },
         ].map((stat, i) => (
           <motion.div key={stat.label} {...stagger(i)}
             whileHover={{ y: -4, scale: 1.02 }}
@@ -173,25 +226,27 @@ function StudentDashboardContent() {
       </div>
 
       {/* AI Recommendation banner */}
-      <motion.div {...FADE_UP} className="bg-gradient-to-br from-pink-50 to-blue-50 dark:from-pink-900/10 dark:to-blue-900/10 border border-pink-200/40 dark:border-pink-700/20 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
-        <div className="w-12 h-12 brand-gradient rounded-xl flex items-center justify-center shadow-lg shadow-pink-500/20 shrink-0">
-          <Orbit className="w-5 h-5 text-white" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <Orbit className="w-3.5 h-3.5 text-primary" />
-            <p className="text-xs font-semibold text-primary">AI Recommendation</p>
+      {enrolledCourses.length > 0 && (
+        <motion.div {...FADE_UP} className="bg-gradient-to-br from-pink-50 to-blue-50 dark:from-pink-900/10 dark:to-blue-900/10 border border-pink-200/40 dark:border-pink-700/20 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
+          <div className="w-12 h-12 brand-gradient rounded-xl flex items-center justify-center shadow-lg shadow-pink-500/20 shrink-0">
+            <Orbit className="w-5 h-5 text-white" />
           </div>
-          <p className="text-sm text-foreground font-medium">Continue <span className="font-bold">Cloud Computing with AWS</span></p>
-          <p className="text-xs text-muted-foreground mt-0.5">Based on your progress, 3 more lessons will complete this module.</p>
-        </div>
-        <Link href="/courses/1/lessons">
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            className="brand-gradient text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-md shadow-pink-500/20 shrink-0 flex items-center gap-1.5">
-            Resume <ArrowRight className="w-3.5 h-3.5" />
-          </motion.button>
-        </Link>
-      </motion.div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <Orbit className="w-3.5 h-3.5 text-primary" />
+              <p className="text-xs font-semibold text-primary">AI Recommendation</p>
+            </div>
+            <p className="text-sm text-foreground font-medium">Continue <span className="font-bold">{enrolledCourses.find(c => c.status === "IN_PROGRESS")?.title ?? enrolledCourses[0]?.title}</span></p>
+            <p className="text-xs text-muted-foreground mt-0.5">Based on your progress, keep learning to boost your XP!</p>
+          </div>
+          <Link href={`/courses/${enrolledCourses.find(c => c.status === "IN_PROGRESS")?.id ?? enrolledCourses[0]?.id}/lessons`}>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+              className="brand-gradient text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-md shadow-pink-500/20 shrink-0 flex items-center gap-1.5">
+              Resume <ArrowRight className="w-3.5 h-3.5" />
+            </motion.button>
+          </Link>
+        </motion.div>
+      )}
 
       {/* Enrolled Courses */}
       <div>
@@ -215,15 +270,16 @@ function StudentDashboardContent() {
             </motion.button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {enrolledCourses.map((course, i) => (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {paginatedCourses.map((course, i) => (
               <motion.div key={course.id} {...stagger(i)} whileHover={{ y: -3 }}
                 className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm hover:shadow-lg hover:shadow-pink-500/10 transition-all group">
                 <div className={`h-2 bg-gradient-to-r ${statusColors[course.status || "NOT_STARTED"]}`} />
                 {/* Course Banner */}
                 <div className="relative h-32 w-full overflow-hidden bg-muted">
-                  <img 
-                    src={course.image || "/images/default-course.png"} 
+                  <img
+                    src={course.image || "/images/default-course.png"}
                     alt={course.title}
                     className="w-full h-full object-cover"
                   />
@@ -235,10 +291,9 @@ function StudentDashboardContent() {
                     </span>
                   </div>
                 </div>
-                
+
                 <div className="p-4">
                   <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{course.description}</p>
-
                   <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
                     <span className="flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" />{course.lessons} lessons</span>
                     <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{course.duration}</span>
@@ -272,41 +327,139 @@ function StudentDashboardContent() {
               </motion.div>
             ))}
           </div>
-        )}
-      </div>
+
+          {/* Course Pagination Controls */}
+          {totalCoursePages > 1 && (
+            <div className="flex items-center justify-center gap-4 mt-6">
+              <button 
+                onClick={() => setCoursePage(p => Math.max(1, p - 1))}
+                disabled={coursePage === 1}
+                className="p-2 rounded-xl bg-card border border-border hover:bg-muted disabled:opacity-50 transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5 text-foreground" />
+              </button>
+              <span className="text-sm font-semibold text-foreground">
+                Page {coursePage} of {totalCoursePages}
+              </span>
+              <button 
+                onClick={() => setCoursePage(p => Math.min(totalCoursePages, p + 1))}
+                disabled={coursePage === totalCoursePages}
+                className="p-2 rounded-xl bg-card border border-border hover:bg-muted disabled:opacity-50 transition-colors"
+              >
+                <ChevronRight className="w-5 h-5 text-foreground" />
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
 
       {/* Weekly Activity */}
       <div>
         <h2 className="text-lg font-bold text-foreground mb-4">Weekly Activity</h2>
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <div className="flex items-end gap-2 h-24">
-            {DEMO_DAILY_ACTIVITY.map((day, i) => {
-              const maxXp = Math.max(...DEMO_DAILY_ACTIVITY.map((d) => d.xp));
-              const h = Math.round((day.xp / maxXp) * 100);
-              return (
-                <div key={day.date} className="flex-1 flex flex-col items-center gap-1.5">
-                  <div className="relative w-full flex justify-center group">
-                    <motion.div
-                      initial={{ height: 0 }}
-                      animate={{ height: `${h}%` }}
-                      transition={{ duration: 0.6, delay: i * 0.08, ease: "easeOut" }}
-                      className="w-full max-w-[28px] brand-gradient rounded-t-md min-h-[4px] shadow-sm cursor-default"
-                    />
-                    <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 transition-opacity bg-card border border-border rounded-lg px-2 py-1 text-[10px] font-semibold text-foreground whitespace-nowrap shadow-lg z-10">
-                      {day.xp} XP
-                    </div>
+        <div className="bg-card border border-border rounded-[2.5rem] p-8 shadow-sm relative overflow-hidden">
+          <div className="flex items-center justify-between mb-10">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center shadow-inner">
+                <TrendingUp className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-foreground uppercase tracking-tight">Learning Consistency</h3>
+                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest opacity-70">Daily XP Breakdown</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-3xl font-black text-foreground drop-shadow-sm">{dailyActivity.slice(-7).reduce((s, d) => s + d.xp, 0)}</p>
+              <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">Total XP This Week</p>
+            </div>
+          </div>
+
+          {dailyActivity.length === 0 ? (
+            <div className="text-center py-12 text-sm text-muted-foreground bg-muted/20 rounded-3xl border border-dashed border-border">
+              No activity data yet. Start learning to see your progress!
+            </div>
+          ) : (
+            <div className="flex flex-col gap-10">
+              {/* Chart Grid Area */}
+              <div className="relative h-48 flex items-end gap-3 sm:gap-6 mt-2 px-4">
+                {/* Horizontal Grid lines with labels */}
+                {[0, 250, 500, 750, 1000].map((level, i) => (
+                  <div key={level} className="absolute left-0 right-0 border-t border-border/20 border-dashed pointer-events-none flex items-center" style={{ bottom: `${(i / 4) * 100}%` }}>
+                     <span className="absolute -left-2 text-[9px] font-bold text-muted-foreground/50 uppercase pr-2 bg-card z-10">{level}</span>
                   </div>
-                  <span className="text-[9px] text-muted-foreground">{day.date.split(" ")[1]}</span>
+                ))}
+
+                {dailyActivity.slice(-7).map((day, i) => {
+                  const currentXp = Number(day.xp);
+                  // Dynamic scaling based on the highest value, but with a minimum ceiling of 500
+                  const ceiling = Math.max(...dailyActivity.slice(-7).map((d) => Number(d.xp)), 500);
+                  const h = Math.round((currentXp / ceiling) * 100);
+                  const isToday = new Date().toDateString() === new Date(day.date).toDateString();
+
+                  return (
+                    <div key={day.date} className="h-full flex-1 flex flex-col items-center gap-4 z-10 group relative">
+                      <div className="relative w-full flex-1 flex justify-center items-end">
+                        {/* Interactive Bar */}
+                        <motion.div
+                          initial={{ height: 0 }}
+                          animate={{ height: `${Math.max(8, h)}%` }}
+                          transition={{ 
+                            type: "spring", stiffness: 120, damping: 14, delay: i * 0.1
+                          }}
+                          className={`w-full max-w-[42px] rounded-t-3xl shadow-2xl relative cursor-pointer transition-all duration-300 group-hover:scale-x-105 ${
+                            isToday 
+                              ? "brand-gradient shadow-pink-500/30" 
+                              : "bg-gradient-to-t from-slate-200 to-slate-100 dark:from-slate-800 dark:to-slate-700 group-hover:from-primary/40 group-hover:to-primary/20"
+                          }`}
+                        >
+                          {/* Top Highlight */}
+                          <div className={`absolute top-0 left-0 right-0 h-4 rounded-t-3xl opacity-50 ${isToday ? "bg-white/30" : "bg-white/10"}`} />
+                        </motion.div>
+                        
+                        {/* XP Tooltip */}
+                        <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all duration-300 transform group-hover:-translate-y-2 bg-foreground text-background rounded-2xl px-3 py-2 text-xs font-black shadow-2xl z-20 flex items-center gap-1.5 shrink-0">
+                          <Zap className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                          {currentXp} XP
+                          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 border-l-8 border-l-transparent border-r-8 border-r-transparent border-t-8 border-t-foreground" />
+                        </div>
+                      </div>
+                      
+                      <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isToday ? "text-primary" : "text-muted-foreground/60"}`}>
+                        {new Date(day.date).toLocaleDateString("en-IN", { weekday: "short" })}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Stats Footer */}
+              <div className="grid grid-cols-2 gap-4 p-2">
+                <div className="flex items-center gap-4 p-6 bg-muted/20 rounded-[2rem] border border-border/50 backdrop-blur-sm">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                    <TrendingUp className="w-5 h-5 text-emerald-500" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest opacity-60 leading-none mb-1">Weekly Average</p>
+                    <p className="text-xl font-black text-foreground tracking-tight">
+                      {Math.round(dailyActivity.slice(-7).reduce((s, d) => s + d.xp, 0) / Math.min(7, dailyActivity.length))} <span className="text-[10px] text-muted-foreground font-bold uppercase">XP/Day</span>
+                    </p>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-          <div className="flex justify-between text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
-            <span className="flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5 text-primary" />This week</span>
-            <span className="font-semibold text-foreground">
-              {DEMO_DAILY_ACTIVITY.reduce((s, d) => s + d.xp, 0)} XP earned
-            </span>
-          </div>
+                
+                <div className="flex items-center gap-4 p-6 bg-muted/20 rounded-[2rem] border border-border/50 backdrop-blur-sm">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                    <Star className="w-5 h-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest opacity-60 leading-none mb-1">Consistency Status</p>
+                    <p className="text-xl font-black text-foreground tracking-tight">
+                       Peak Learner
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -318,11 +471,17 @@ function StudentDashboardContent() {
             View all <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {DEMO_ACHIEVEMENTS.slice(0, 8).map((a, i) => (
-            <AchievementBadge key={a.id} a={a} i={i} />
-          ))}
-        </div>
+        {achievements.length === 0 ? (
+          <div className="text-center py-8 bg-card border border-border rounded-2xl text-sm text-muted-foreground">
+            No achievements yet. Keep learning to earn badges!
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {achievements.slice(0, 8).map((a, i) => (
+              <AchievementBadge key={a.id} a={a} i={i} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Enroll dialog */}
@@ -363,8 +522,8 @@ function StudentDashboardContent() {
                   availableCourses.map((course) => (
                     <div key={course.id} className="flex items-center gap-4 p-4 bg-muted/30 border border-border rounded-2xl hover:bg-muted/50 transition-colors">
                       <div className="relative w-16 h-16 rounded-xl overflow-hidden shrink-0 shadow-md">
-                        <img 
-                          src={course.image || "/images/default-course.png"} 
+                        <img
+                          src={course.image || "/images/default-course.png"}
                           alt={course.title}
                           className="w-full h-full object-cover"
                         />

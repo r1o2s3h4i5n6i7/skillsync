@@ -9,7 +9,24 @@ import {
   BarChart3, Users, Settings, Flame, Star, Orbit, Plus
 } from "lucide-react";
 import Link from "next/link";
-import { AI_STUDENT_TIPS, AI_TEACHER_TIPS } from "@/lib/demo-data";
+import Image from "next/image";
+import { getAvatarPath } from "@/types/auth";
+
+const AI_STUDENT_TIPS = [
+  "Complete one lesson daily to maintain your streak! 🔥",
+  "Quiz scores above 80% earn bonus XP rewards.",
+  "Check the leaderboard to see how you rank among peers.",
+  "Review completed lessons to reinforce your learning.",
+  "Set a goal to finish at least one course this month!",
+];
+
+const AI_TEACHER_TIPS = [
+  "Students with low progress may need encouragement.",
+  "Adding quizzes increases engagement by 40%.",
+  "Check your course analytics for student performance trends.",
+  "Consider updating course content based on quiz results.",
+  "Respond to student queries within 24 hours for best results.",
+];
 import { useState, useEffect } from "react";
 
 interface NavItem {
@@ -30,7 +47,7 @@ const TEACHER_NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard/teacher", icon: BarChart3 },
   { label: "Add Course", href: "/dashboard/teacher/courses/new", icon: Plus },
   { label: "My Courses", href: "/dashboard/teacher?tab=courses", icon: BookOpen },
-  { label: "Students", href: "/dashboard/teacher?tab=students", icon: Users },
+  { label: "Evaluate", href: "/dashboard/teacher/evaluate", icon: ClipboardList },
 ];
 
 const ADMIN_NAV: NavItem[] = [
@@ -108,9 +125,13 @@ export default function Sidebar() {
       {user && (
         <div className="brand-gradient rounded-2xl p-4 text-white shadow-lg shadow-violet-500/20">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center font-bold text-sm backdrop-blur-sm">
-            {user.avatar}
-          </div>
+          <Image
+            src={getAvatarPath(user.role)}
+            alt={`${user.role} avatar`}
+            width={40}
+            height={40}
+            className="w-10 h-10 rounded-xl object-cover shadow-sm"
+          />
           <div className="min-w-0">
             <p className="font-semibold text-sm truncate">{user.name.split(" ")[0]}</p>
             <p className="text-white/70 text-xs capitalize">{user.role.toLowerCase()} · {user.city}</p>

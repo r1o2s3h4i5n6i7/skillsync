@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  
+
   // Get role and login status from cookies
   const userRole = request.cookies.get('user_role')?.value;
   const isLoggedIn = request.cookies.get('is_logged_in')?.value === 'true';

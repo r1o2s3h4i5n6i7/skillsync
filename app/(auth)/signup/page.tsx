@@ -24,10 +24,29 @@ export default function SignUp() {
       return;
     }
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setLoading(false);
-    toast.success("Account created! Please sign in with your credentials.");
-    router.push("/signin");
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          role: form.role,
+        }),
+      });
+      const data: { user?: { name: string }; error?: string } = await res.json();
+      if (res.ok) {
+        toast.success("Account created! Please sign in with your credentials.");
+        router.push("/signin");
+      } else {
+        toast.error(data.error || "Registration failed. Please try again.");
+      }
+    } catch {
+      toast.error("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

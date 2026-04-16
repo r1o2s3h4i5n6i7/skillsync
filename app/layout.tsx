@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/lib/auth-context";
 import { CourseProvider } from "@/lib/course-context";
+import { NotificationProvider } from "@/lib/notification-context";
 
 import { ThemeProvider } from "@/components/ThemeProvider";
 
@@ -33,9 +34,11 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            <CourseProvider>
-              {children}
-            </CourseProvider>
+            <NotificationProvider>
+              <CourseProvider>
+                {children}
+              </CourseProvider>
+            </NotificationProvider>
           </AuthProvider>
         </ThemeProvider>
         <Toaster

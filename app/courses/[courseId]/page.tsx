@@ -1,26 +1,72 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useCourses } from "@/lib/course-context";
 import { useAuth } from "@/lib/auth-context";
-import { DEMO_LESSONS, DEMO_QUIZZES, DEMO_ASSIGNMENTS } from "@/lib/demo-data";
 import { 
   BookOpen, Star, Clock, Globe, 
   Orbit, CheckCircle2, Play, Users, Sparkles,
   Award, BarChart3, ChevronRight, ClipboardList, Lock, ArrowLeft
 } from "lucide-react";
 import Link from "next/link";
+import { Loader } from "@/components/Loader";
 
 export default function CoursePage() {
   const params = useParams();
   const router = useRouter();
-  const { getCourse, getCourseLessons, getCourseQuizzes, getCourseAssignments, enrolledIds, enrollCourse } = useCourses();
+  const { getCourse, getCourseLessons, getCourseQuizzes, getCourseAssignments, enrolledIds, enrollCourse, fetchCourseDetail, isLoading } = useCourses();
   const { user } = useAuth();
   const courseId = Number(params.courseId);
   const course = getCourse(courseId);
+
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [issubmitting, setIsSubmitting] = useState(false);
+  const [newRating, setNewRating] = useState(5);
+  const [newComment, setNewComment] = useState("");
+
+  const fetchReviews = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/courses/${courseId}/reviews`);
+      if (res.ok) {
+        const data = await res.json();
+        setReviews(data.reviews);
+      }
+    } finally {
+      setReviewsLoading(false);
+    }
+  }, [courseId]);
+
+  useEffect(() => {
+    fetchCourseDetail(courseId);
+    fetchReviews();
+  }, [courseId, fetchCourseDetail, fetchReviews]);
+
+  const handleSubmitReview = async () => {
+    if (!newComment.trim()) return toast.error("Please enter a comment.");
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`/api/courses/${courseId}/reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating: newRating, comment: newComment }),
+      });
+      if (res.ok) {
+        toast.success("Review submitted!");
+        setNewComment("");
+        fetchReviews();
+      } else {
+        const error = await res.json();
+        toast.error(error.error || "Failed to submit review.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
   const isInstructor = user?.role === "TEACHER" && course?.instructorId === user?.id;
   const isAdmin = user?.role === "ADMIN";
@@ -29,6 +75,15 @@ export default function CoursePage() {
   const lessons = getCourseLessons(courseId);
   const quizzes = getCourseQuizzes(courseId);
   const assignments = getCourseAssignments(courseId);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <Loader size="lg" />
+        <p className="text-sm text-muted-foreground font-medium">Loading course details...</p>
+      </div>
+    );
+  }
 
   if (!course) {
     return (
@@ -180,6 +235,91 @@ export default function CoursePage() {
           </div>
         </div>
       )}
+      {/* Community Feedback */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10 pb-10">
+        <div className="lg:col-span-1">
+          <div className="bg-card border border-border rounded-[2rem] p-8 shadow-sm h-full flex flex-col">
+            <h3 className="text-xl font-black text-foreground mb-4">Leave a Review</h3>
+            {isEnrolled ? (
+              <div className="flex flex-col gap-4">
+                <p className="text-sm text-muted-foreground">How was your learning experience?</p>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <motion.button key={star} whileHover={{ scale: 1.2 }} whileTap={{ scale: 0.9 }}
+                      onClick={() => setNewRating(star)} className="focus:outline-none">
+                      <Star className={`w-6 h-6 ${newRating >= star ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+                    </motion.button>
+                  ))}
+                </div>
+                <textarea
+                  placeholder="Share your feedback with the community..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  className="w-full h-32 bg-muted/40 border border-border rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none resize-none"
+                />
+                <motion.button
+                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  onClick={handleSubmitReview}
+                  disabled={issubmitting}
+                  className="w-full brand-gradient text-white font-bold py-3 rounded-xl text-sm shadow-md shadow-pink-500/20 disabled:opacity-50"
+                >
+                  {issubmitting ? "Submitting..." : "Post Review"}
+                </motion.button>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-center gap-4 py-8">
+                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                  <Star className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">Enroll in this course to share your thoughts!</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="lg:col-span-2">
+          <div className="bg-card border border-border rounded-[2rem] p-8 shadow-sm h-full flex flex-col">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-black text-foreground">Community Feedback</h3>
+              <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full">
+                <Users className="w-4 h-4 text-primary" />
+                <span className="text-xs font-bold text-primary">{reviews.length} Reviews</span>
+              </div>
+            </div>
+
+            {reviewsLoading ? (
+              <div className="flex-1 flex justify-center items-center py-12"><Loader /></div>
+            ) : reviews.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center gap-4 py-12 opacity-60">
+                 <ClipboardList className="w-12 h-12 text-muted-foreground" />
+                 <p className="text-sm text-muted-foreground">No reviews yet. Be the first!</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-6 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                {reviews.map((review, i) => (
+                  <motion.div key={review.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                    className="flex gap-4 p-5 bg-muted/20 rounded-2xl border border-border/50 relative group">
+                    <img src={review.user.avatar || "/images/default-avatar.png"} alt={review.user.name} 
+                         className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-black text-foreground">{review.user.name}</p>
+                        <span className="text-[10px] text-muted-foreground">{new Date(review.createdAt).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center gap-1 mb-2">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <Star key={s} className={`w-3 h-3 ${review.rating >= s ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"}`} />
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed italic">"{review.comment}"</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

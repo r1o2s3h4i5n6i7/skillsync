@@ -11,7 +11,7 @@ import {
   Plus, Save, ArrowLeft, BookOpen, Clock, 
   Sparkles, Orbit, Trash2, Edit2, Play, 
   CheckCircle2, AlertCircle, ChevronRight, X,
-  Info, ClipboardList, ChevronUp, ChevronDown, ChevronLeft, Check
+  Info, ClipboardList, ChevronUp, ChevronDown, ChevronLeft, Check, FileText
 } from "lucide-react";
 import Link from "next/link";
 import AIGeneratorModal from "@/components/AIGeneratorModal";
@@ -86,6 +86,7 @@ export default function CreateCoursePage() {
     difficulty: "EASY" as "EASY" | "MEDIUM" | "HARD",
     duration: "10 hours",
     tags: "",
+    image: undefined as string | undefined,
   });
 
   const [lessons, setLessons] = useState<any[]>([{ title: "", duration: "15 min", xpReward: 50 }]);
@@ -435,6 +436,55 @@ export default function CreateCoursePage() {
                   onChange={(e) => setCourseInfo({ ...courseInfo, description: e.target.value })}
                   className="p-3 bg-muted/50 border border-border rounded-xl focus:ring-2 focus:ring-primary/20 outline-none transition-all resize-none"
                 />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-foreground">Course Cover Image (Optional)</label>
+                <div 
+                  className="border-2 border-dashed border-primary/30 rounded-xl p-6 text-center hover:border-primary/60 transition-colors cursor-pointer bg-primary/5 flex flex-col items-center justify-center relative overflow-hidden"
+                  onClick={() => document.getElementById("course-image-upload")?.click()}
+                >
+                  <input
+                    id="course-image-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        toast.loading("Uploading image...");
+                        const formData = new FormData();
+                        formData.append("file", e.target.files[0]);
+                        formData.append("folder", "courses");
+                        try {
+                          const res = await fetch("/api/upload", { method: "POST", body: formData });
+                          const data = await res.json();
+                          if (res.ok) {
+                             setCourseInfo(prev => ({ ...prev, image: data.url }));
+                             toast.dismiss();
+                             toast.success("Image uploaded!");
+                          } else throw new Error(data.error);
+                        } catch (err: any) {
+                          toast.dismiss();
+                          toast.error(err.message || "Failed to upload image");
+                        }
+                      }
+                    }}
+                  />
+                  {courseInfo.image ? (
+                    <div className="w-full h-32 relative rounded-lg overflow-hidden">
+                       <img src={courseInfo.image} alt="Course Cover Preview" className="w-full h-full object-cover" />
+                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity text-white text-sm font-bold">
+                          Click to change
+                       </div>
+                    </div>
+                  ) : (
+                    <>
+                      <FileText className="w-8 h-8 text-primary/40 mx-auto mb-2" />
+                      <p className="font-semibold text-sm text-foreground">Click to upload cover image</p>
+                      <p className="text-xs text-muted-foreground mt-1">JPG, PNG (max 5MB)</p>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

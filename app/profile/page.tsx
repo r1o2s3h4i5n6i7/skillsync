@@ -1,22 +1,46 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
-import {
-  DEMO_ACHIEVEMENTS, DEMO_COURSES, STUDENT_ENROLLED_IDS,
-  getXpForNextLevel, getXpForCurrentLevel, TEACHER_ACHIEVEMENTS
-} from "@/lib/demo-data";
+import { useCourses } from "@/lib/course-context";
+import { Loader } from "@/components/Loader";
+import Image from "next/image";
+import { getAvatarPath } from "@/types/auth";
+import type { AchievementData } from "@/types/dashboard";
 import {
   Flame, Zap, Star, Trophy, BookOpen, Calendar, MapPin,
-  Mail, Orbit, Lock, User, Shield, LogOut, Edit2, ShieldCheck, Camera, Bell, Award, Clock
+  Mail, Orbit, Lock, User, Shield, LogOut, Edit2, ShieldCheck, Camera, Bell, Award, Clock,
 } from "lucide-react";
 import Link from "next/link";
 
-const ACH_ICONS: Record<string, React.ElementType> = { Star, Trophy, Flame, Zap };
+const ACH_ICONS: Record<string, React.ElementType> = { Star, Trophy, Flame, Zap, Award, Orbit };
+
+import { calculateLevelAndProgress } from "@/lib/level-utils";
 
 export default function ProfilePage() {
   const { user } = useAuth();
-  if (!user) return null;
+  const { courses, enrolledIds } = useCourses();
+  const [achievements, setAchievements] = useState<AchievementData[]>([]);
+  const [isLoadingAch, setIsLoadingAch] = useState(true);
+
+  const fetchAchievements = useCallback(async () => {
+    try {
+      const res = await fetch("/api/achievements");
+      if (res.ok) {
+        const data: { achievements: AchievementData[] } = await res.json();
+        setAchievements(data.achievements);
+      }
+    } catch (err) {
+      console.error("Achievements fetch error:", err);
+    } finally {
+      setIsLoadingAch(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) fetchAchievements();
+  }, [user, fetchAchievements]);
 
   if (!user) {
     return (
@@ -31,24 +55,21 @@ export default function ProfilePage() {
     );
   }
 
-  const xpForCurrent = getXpForCurrentLevel(user.level);
-  const xpForNext = getXpForNextLevel(user.level);
-  const xpProgress = Math.round(((user.xp - xpForCurrent) / (xpForNext - xpForCurrent)) * 100);
-  const enrolledCourses = DEMO_COURSES.filter((c) => STUDENT_ENROLLED_IDS.includes(c.id));
-  const myCreatedCourses = DEMO_COURSES.filter(c => c.instructorId === user.id);
-  
-  const achievements = user.role === "TEACHER" ? TEACHER_ACHIEVEMENTS : DEMO_ACHIEVEMENTS;
+  const { level: computedLevel, totalXpForNextLevel, progressPercentage } = calculateLevelAndProgress(user.xp);
+  const enrolledCourses = courses.filter((c) => enrolledIds.includes(c.id));
+  const myCreatedCourses = courses.filter((c) => c.instructorId === user.id);
+
   const earnedAchievements = achievements.filter((a) => a.earned);
 
   const stats = user.role === "TEACHER" ? [
     { label: "Courses", value: myCreatedCourses.length, suffix: "", icon: BookOpen, color: "text-primary" },
     { label: "Students", value: myCreatedCourses.reduce((acc, c) => acc + c.enrolled, 0).toLocaleString(), suffix: "", icon: Orbit, color: "text-orange-500" },
-    { 
-      label: "Top Course", 
-      value: myCreatedCourses.length > 0 ? [...myCreatedCourses].sort((a,b) => b.enrolled - a.enrolled)[0].enrolled : 0, 
-      suffix: " enr.", 
-      icon: Trophy, 
-      color: "text-amber-500" 
+    {
+      label: "Top Course",
+      value: myCreatedCourses.length > 0 ? [...myCreatedCourses].sort((a, b) => b.enrolled - a.enrolled)[0].enrolled : 0,
+      suffix: " enr.",
+      icon: Trophy,
+      color: "text-amber-500",
     },
   ] : [
     { label: "Current Streak", value: user.streak, suffix: "d", icon: Flame, color: "text-orange-500" },
@@ -62,9 +83,13 @@ export default function ProfilePage() {
       <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
         className="relative overflow-hidden brand-gradient rounded-[2rem] p-8 text-white shadow-xl shadow-pink-500/20">
         <div className="relative z-10 flex items-start gap-5">
-          <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl font-extrabold border-2 border-white/30 shrink-0 shadow-lg">
-            {user.avatar}
-          </div>
+          <Image
+            src={getAvatarPath(user.role)}
+            alt={`${user.role} avatar`}
+            width={80}
+            height={80}
+            className="w-20 h-20 rounded-2xl object-cover border-2 border-white/30 shrink-0 shadow-lg"
+          />
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl font-extrabold">{user.name}</h1>
             <div className="flex flex-wrap items-center gap-3 mt-1 text-white/80 text-xs">
@@ -76,7 +101,7 @@ export default function ProfilePage() {
             </div>
             <div className="mt-2 flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 bg-white/20 px-2.5 py-1 rounded-full text-xs font-semibold capitalize">
-                      <Orbit className="w-5 h-5 text-blue-500" /> {user.role.toLowerCase()}
+                <Orbit className="w-5 h-5 text-blue-500" /> {user.role.toLowerCase()}
               </span>
             </div>
           </div>
@@ -86,18 +111,18 @@ export default function ProfilePage() {
         {user.role !== "ADMIN" && (
           <div className="relative z-10 mt-5">
             <div className="flex justify-between text-xs mb-1.5">
-              <span className="text-white/70 font-medium">Level {user.level}</span>
-              <span className="text-white/70">{user.xp.toLocaleString()} / {xpForNext.toLocaleString()} XP</span>
+              <span className="text-white/70 font-medium">Level {computedLevel}</span>
+              <span className="text-white/70">{user.xp.toLocaleString()} / {totalXpForNextLevel.toLocaleString()} XP</span>
             </div>
             <div className="h-2.5 bg-white/20 rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${xpProgress}%` }}
+                animate={{ width: `${progressPercentage}%` }}
                 transition={{ duration: 1.2, ease: "easeOut", delay: 0.3 }}
                 className="h-full bg-white rounded-full"
               />
             </div>
-            <p className="text-[10px] text-white/60 mt-1">{xpForNext - user.xp} XP to Level {user.level + 1}</p>
+            <p className="text-[10px] text-white/60 mt-1">{Math.max(0, totalXpForNextLevel - user.xp)} XP to Level {computedLevel + 1}</p>
           </div>
         )}
         <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-white/5" />
@@ -181,30 +206,36 @@ export default function ProfilePage() {
       {user.role !== "ADMIN" && (
         <div>
           <h2 className="font-bold text-foreground mb-3 flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-primary" /> 
+            <Trophy className="w-4 h-4 text-primary" />
             {user.role === "TEACHER" ? "Teaching Achievements" : "Learning Achievements"} ({earnedAchievements.length}/{achievements.length})
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {achievements.map((a, i) => {
-              const Icon = ACH_ICONS[a.icon] || Star;
-              return (
-                <motion.div key={a.id}
-                  initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-                  whileHover={a.earned ? { y: -2 } : {}}
-                  className={`flex flex-col items-center gap-2 p-3 rounded-2xl border text-center ${
-                    a.earned
-                      ? "border-pink-200 bg-pink-50/50 dark:bg-pink-900/10"
-                      : "border-border bg-muted/20 opacity-40 grayscale"
-                  }`}>
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${a.earned ? "brand-gradient shadow-lg shadow-pink-500/20" : "bg-muted"}`}>
-                    {a.earned ? <Icon className="w-5 h-5 text-white" /> : <Lock className="w-4 h-4 text-muted-foreground" />}
-                  </div>
-                  <p className="text-[11px] font-semibold text-foreground leading-tight">{a.title}</p>
-                  {a.earned && <p className="text-[10px] font-bold text-primary">+{a.xpBonus} XP</p>}
-                </motion.div>
-              );
-            })}
-          </div>
+          {isLoadingAch ? (
+            <div className="flex justify-center py-8">
+              <Loader size="md" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {achievements.map((a, i) => {
+                const Icon = ACH_ICONS[a.icon] || Star;
+                return (
+                  <motion.div key={a.id}
+                    initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                    whileHover={a.earned ? { y: -2 } : {}}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-2xl border text-center ${
+                      a.earned
+                        ? "border-pink-200 bg-pink-50/50 dark:bg-pink-900/10"
+                        : "border-border bg-muted/20 opacity-40 grayscale"
+                    }`}>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${a.earned ? "brand-gradient shadow-lg shadow-pink-500/20" : "bg-muted"}`}>
+                      {a.earned ? <Icon className="w-5 h-5 text-white" /> : <Lock className="w-4 h-4 text-muted-foreground" />}
+                    </div>
+                    <p className="text-[11px] font-semibold text-foreground leading-tight">{a.title}</p>
+                    {a.earned && <p className="text-[10px] font-bold text-primary">+{a.xpBonus} XP</p>}
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

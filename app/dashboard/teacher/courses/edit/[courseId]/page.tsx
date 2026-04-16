@@ -10,7 +10,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { 
   Plus, Save, ArrowLeft, BookOpen, Clock, 
   Sparkles, Orbit, Trash2, Edit2, Play, 
-  CheckCircle2, AlertCircle, ChevronRight, X,
+  CheckCircle2, AlertCircle, ChevronRight, X, Camera,
   Info, ClipboardList, ChevronUp, ChevronDown, ChevronLeft, Check
 } from "lucide-react";
 import Link from "next/link";
@@ -89,6 +89,7 @@ export default function EditCoursePage() {
     difficulty: "EASY" as "EASY" | "MEDIUM" | "HARD",
     duration: "10 hours",
     tags: "",
+    image: "",
   });
 
   const [lessons, setLessons] = useState<any[]>([]);
@@ -111,6 +112,7 @@ export default function EditCoursePage() {
       difficulty: course.difficulty,
       duration: course.duration,
       tags: course.tags.join(", "),
+      image: course.image,
     });
 
     setLessons(getCourseLessons(courseId).map(l => ({ 
@@ -149,6 +151,32 @@ export default function EditCoursePage() {
   }, [courseId, getCourse, getCourseLessons, getCourseQuizzes, getCourseAssignments, router]);
 
   // Handlers
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("folder", "courses");
+
+    const loadingToast = toast.loading("Uploading course image...");
+    try {
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCourseInfo({ ...courseInfo, image: data.url });
+        toast.success("Image uploaded successfully!", { id: loadingToast });
+      } else {
+        toast.error("Upload failed.", { id: loadingToast });
+      }
+    } catch (err) {
+      toast.error("Error uploading image.", { id: loadingToast });
+    }
+  };
+
   const handleAddLesson = () => {
     setLessons([...lessons, { title: "", duration: "15 min", xpReward: 50 }]);
     setExpandedLessonIdx(lessons.length);
@@ -368,7 +396,8 @@ export default function EditCoursePage() {
         tags: rawTags.split(",").map(t => t.trim()).filter(Boolean),
         lessons,
         quizzes,
-        assignments
+        assignments,
+        image: courseInfo.image
       };
 
       updateCourse(courseId, payload);
@@ -472,6 +501,35 @@ export default function EditCoursePage() {
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold text-foreground">Course Thumbnail</label>
+                <div className="flex items-center gap-6 p-4 bg-muted/30 border border-dashed border-border rounded-2xl">
+                  <div className="relative group w-32 h-20 rounded-xl overflow-hidden bg-muted flex items-center justify-center shrink-0 border border-border">
+                    {courseInfo.image ? (
+                      <img src={courseInfo.image} alt="Course" className="w-full h-full object-cover" />
+                    ) : (
+                      <BookOpen className="w-8 h-8 text-muted-foreground/40" />
+                    )}
+                    <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                      <Camera className="w-6 h-6 text-white" />
+                      <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                    </label>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-foreground mb-1">Upload a premium thumbnail</p>
+                    <p className="text-[10px] text-muted-foreground">Recommended: 1200x800px. Supports PNG, JPG.</p>
+                    {courseInfo.image && (
+                      <button 
+                        onClick={() => setCourseInfo({ ...courseInfo, image: "" })}
+                        className="text-[10px] text-rose-500 font-bold mt-2 hover:underline"
+                      >
+                        Remove Image
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 

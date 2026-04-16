@@ -1,29 +1,50 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useCourses } from "@/lib/course-context";
 import LessonContentEngine from "@/components/lesson-content-engine";
 import {
-  ArrowLeft, CheckCircle2, Zap, Clock, Lock, BookOpen, ChevronRight,
+  ArrowLeft, CheckCircle2, Zap, Clock, Lock, BookOpen, ChevronRight, Flame,
 } from "lucide-react";
 import Link from "next/link";
+import { Loader } from "@/components/Loader";
 
 export default function LessonDetailPage() {
   const { user } = useAuth();
-  const { getCourse, getCourseLessons, enrolledIds, completedLessonIds, completeLesson } = useCourses();
   const params = useParams();
   const router = useRouter();
-
-  if (!user) return null;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showStreak, setShowStreak] = useState(false);
+  const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false);
+  const { 
+    getCourse, getCourseLessons, enrolledIds, completedLessonIds, 
+    completeLesson, isLoading, courseDetailsLoading, fetchCourseDetail 
+  } = useCourses();
 
   const courseId = Number(params.courseId);
   const lessonId = Number(params.lessonId);
+
+  useEffect(() => {
+    const loadData = async () => {
+      if (courseId) {
+        await fetchCourseDetail(courseId);
+        setHasAttemptedFetch(true);
+      }
+    };
+    loadData();
+  }, [courseId, fetchCourseDetail]);
+
+  if (!user) return null;
+  
   const course = getCourse(courseId);
   const lessons = getCourseLessons(courseId);
   const lesson = lessons.find((l) => l.id === lessonId);
+
+  if (!lesson) return null;
 
   const isEnrolled = user.role === "STUDENT" ? enrolledIds.includes(courseId) : true;
   const isDone = completedLessonIds.includes(lessonId);
@@ -34,14 +55,26 @@ export default function LessonDetailPage() {
   const prevLesson = currentIndex > 0 ? lessons[currentIndex - 1] : null;
   const nextLesson = currentIndex < lessons.length - 1 ? lessons[currentIndex + 1] : null;
 
-  if (!course || !lesson) {
+  if (isLoading || (courseDetailsLoading && lessons.length === 0) || (!hasAttemptedFetch && lessons.length === 0)) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <BookOpen className="w-12 h-12 text-muted-foreground/40" />
-        <p className="text-muted-foreground">Lesson not found.</p>
-        <Link href="/courses">
-          <motion.button whileHover={{ scale: 1.02 }} className="brand-gradient text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-pink-500/20">
-            Back to Courses
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+        <Loader size="lg" />
+        <p className="text-sm text-muted-foreground font-medium animate-pulse">Synchronizing your progress...</p>
+      </div>
+    );
+  }
+
+  if (!course || (!lesson && hasAttemptedFetch)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+        <div className="w-20 h-20 rounded-3xl bg-muted flex items-center justify-center mb-2">
+          <BookOpen className="w-10 h-10 text-muted-foreground/40" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">Lesson not found.</h2>
+        <p className="text-muted-foreground text-sm max-w-xs text-center">We couldn't locate this lesson. It might have been moved or deleted.</p>
+        <Link href={`/courses/${courseId}`}>
+          <motion.button whileHover={{ scale: 1.05 }} className="brand-gradient text-white px-6 py-2 rounded-xl text-sm font-bold shadow-lg shadow-pink-500/20">
+            Back to Course
           </motion.button>
         </Link>
       </div>
@@ -62,16 +95,78 @@ export default function LessonDetailPage() {
     );
   }
 
-  const handleComplete = () => {
-    if (isDone) return;
-    completeLesson(lessonId, courseId);
-    toast.success(`+${lesson.xpReward} XP Earned! 🎉`, {
-      description: `"${lesson.title}" marked as complete.`,
-    });
+  const handleComplete = async () => {
+    if (isDone || isSubmitting) return;
+    setIsSubmitting(true);
+    const result = await completeLesson(lessonId);
+    
+    if (result) {
+      toast.success(`+${lesson.xpReward} XP Earned! 🎉`, {
+        description: `"${lesson.title}" marked as complete.`,
+      });
+      
+      if (result.showStreakAnimation) {
+        setShowStreak(true);
+        setTimeout(() => setShowStreak(false), 4000);
+      }
+
+      // Auto-navigation after 1.5s
+      setTimeout(() => {
+        if (nextLesson) {
+          router.push(`/courses/${courseId}/lessons/${nextLesson.id}`);
+        } else {
+          toast.success("Congratulations! You've finished all lessons in this course.");
+          router.push(`/courses/${courseId}`);
+        }
+      }, 1500);
+    }
+    
+    setIsSubmitting(false);
   };
 
   return (
-    <div className="flex flex-col gap-6 max-w-3xl mx-auto">
+    <>
+      <AnimatePresence>
+        {showStreak && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.5, y: 50, rotate: -10 }}
+              animate={{ scale: 1, y: 0, rotate: 0 }}
+              exit={{ scale: 0.5, y: -50, opacity: 0 }}
+              transition={{ type: "spring", bounce: 0.5, duration: 0.8 }}
+              className="flex flex-col items-center justify-center"
+            >
+               <div className="relative">
+                 <div className="absolute inset-0 bg-orange-500 blur-3xl opacity-50 rounded-full" />
+                 <Flame className="w-48 h-48 text-orange-400 drop-shadow-[0_0_20px_rgba(251,146,60,0.8)] relative z-10" />
+               </div>
+               <motion.h2 
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{ delay: 0.4 }}
+                 className="text-4xl font-extrabold text-white mt-6 drop-shadow-lg"
+               >
+                 Daily Streak Started! 🔥
+               </motion.h2>
+               <motion.p 
+                 initial={{ opacity: 0 }}
+                 animate={{ opacity: 1 }}
+                 transition={{ delay: 0.8 }}
+                 className="text-xl text-orange-100 font-medium mt-2"
+               >
+                 Keep learning every day to maintain it.
+               </motion.p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="flex flex-col gap-6 max-w-3xl mx-auto">
       {/* Back navigation */}
       <Link href={`/courses/${courseId}/lessons`}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit">
@@ -146,10 +241,15 @@ export default function LessonDetailPage() {
           <motion.button
             whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
             onClick={handleComplete}
+            disabled={isSubmitting}
             className="w-full brand-gradient text-white font-bold py-4 rounded-2xl shadow-xl shadow-pink-500/25 flex items-center justify-center gap-2 text-sm"
           >
-            <CheckCircle2 className="w-5 h-5" />
-            Mark as Complete · Earn {lesson.xpReward} XP
+            {isSubmitting ? "Processing..." : (
+              <>
+                <CheckCircle2 className="w-5 h-5" />
+                Mark as Complete · Earn {lesson.xpReward} XP
+              </>
+            )}
           </motion.button>
         )}
       </motion.div>
@@ -194,5 +294,6 @@ export default function LessonDetailPage() {
         )}
       </div>
     </div>
+    </>
   );
 }

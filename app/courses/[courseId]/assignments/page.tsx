@@ -6,13 +6,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useCourses } from "@/lib/course-context";
-import { ArrowLeft, ClipboardList, CheckCircle2, Clock, AlertCircle, Upload, XCircle, Star, Lock } from "lucide-react";
+import { ArrowLeft, ClipboardList, CheckCircle2, Clock, AlertCircle, Upload, XCircle, Star, Lock, FileText } from "lucide-react";
 import Link from "next/link";
 
 const STATUS_STYLES: Record<string, { grad: string; label: string; icon: React.ElementType }> = {
   GRADED:    { grad: "from-emerald-400 to-green-500",  label: "Graded",    icon: CheckCircle2 },
   SUBMITTED: { grad: "from-blue-400 to-indigo-500",    label: "Submitted", icon: Clock },
   PENDING:   { grad: "from-amber-400 to-orange-500",   label: "Pending",   icon: AlertCircle },
+  EXPIRED:   { grad: "from-rose-400 to-red-600",       label: "Expired",   icon: XCircle },
 };
 
 export default function CourseAssignmentsPage() {
@@ -85,15 +86,16 @@ export default function CourseAssignmentsPage() {
           <h1 className="text-2xl font-extrabold mb-1">Assignments</h1>
           <p className="text-white/80 text-sm">{course.title}</p>
           {!shouldHideStudentActions && (
-            <div className="mt-4 grid grid-cols-3 gap-3">
+            <div className="mt-4 grid grid-cols-4 gap-2">
               {[
-                { label: "Pending",   count: assignments.filter((a) => a.status === "PENDING").length,   color: "text-amber-200" },
+                { label: "Pending",   count: assignments.filter((a) => a.status === "PENDING" && new Date(a.dueDate) >= new Date()).length,   color: "text-amber-200" },
+                { label: "Expired",   count: assignments.filter((a) => a.status === "PENDING" && new Date(a.dueDate) < new Date()).length,    color: "text-rose-200" },
                 { label: "Submitted", count: assignments.filter((a) => a.status === "SUBMITTED").length, color: "text-blue-200" },
                 { label: "Graded",    count: assignments.filter((a) => a.status === "GRADED").length,    color: "text-emerald-200" },
               ].map((s) => (
-                <div key={s.label} className="bg-white/15 rounded-xl p-3 text-center">
-                  <p className={`text-2xl font-extrabold ${s.color}`}>{s.count}</p>
-                  <p className="text-xs text-white/70">{s.label}</p>
+                <div key={s.label} className="bg-white/15 rounded-xl p-2 text-center">
+                  <p className={`text-xl font-extrabold ${s.color}`}>{s.count}</p>
+                  <p className="text-[10px] text-white/70 uppercase font-black">{s.label}</p>
                 </div>
               ))}
             </div>
@@ -110,9 +112,12 @@ export default function CourseAssignmentsPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {assignments.map((assignment, i) => {
-            const s = STATUS_STYLES[assignment.status];
-            const StatusIcon = s.icon;
             const isOverdue = new Date(assignment.dueDate) < new Date() && assignment.status === "PENDING";
+            // Safety: if it has a score but marked as SUBMITTED, treat as GRADED
+            const effectiveStatus = (assignment.score !== undefined && assignment.status === "SUBMITTED") ? "GRADED" : assignment.status;
+            const displayStatus = isOverdue ? "EXPIRED" : effectiveStatus;
+            const s = STATUS_STYLES[displayStatus];
+            const StatusIcon = s.icon;
             return (
               <motion.div key={assignment.id}
                 initial={{ opacity: 0, y: 16 }}
@@ -146,12 +151,29 @@ export default function CourseAssignmentsPage() {
                       </span>
                     )}
                   </div>
-                  {!shouldHideStudentActions && assignment.status === "PENDING" && (
-                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                      onClick={() => setShowUpload(assignment.id)}
-                      className="mt-4 w-full brand-gradient text-white text-xs font-semibold py-2.5 rounded-xl shadow-md shadow-pink-500/20 flex items-center justify-center gap-2">
-                      <Upload className="w-3.5 h-3.5" /> Submit Assignment
-                    </motion.button>
+                  {!shouldHideStudentActions && (
+                    <div className="mt-4 flex flex-col gap-2">
+                      {assignment.status === "PENDING" && !isOverdue ? (
+                        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                          onClick={() => setShowUpload(assignment.id)}
+                          className="w-full brand-gradient text-white text-xs font-semibold py-2.5 rounded-xl shadow-md shadow-pink-500/20 flex items-center justify-center gap-2">
+                          <Upload className="w-3.5 h-3.5" /> Submit Assignment
+                        </motion.button>
+                      ) : (
+                        <>
+                          <div className="p-3 rounded-xl bg-muted/30 border border-border text-center">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase">
+                               {assignment.status !== "PENDING" ? "Submission Locked" : "Deadline Passed"}
+                            </p>
+                          </div>
+                          {assignment.fileUrl && (
+                            <Link href={assignment.fileUrl} target="_blank" className="flex items-center justify-center gap-2 py-2 text-xs font-bold text-primary hover:bg-primary/5 rounded-lg transition-colors border border-primary/20">
+                              <FileText className="w-3.5 h-3.5" /> View My Submission
+                            </Link>
+                          )}
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
               </motion.div>

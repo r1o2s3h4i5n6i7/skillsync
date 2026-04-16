@@ -9,6 +9,7 @@ import {
   CheckCircle2, Lock, ChevronRight, BookOpen, Zap
 } from "lucide-react";
 import Link from "next/link";
+import { Loader } from "@/components/Loader";
 
 const TYPE_STYLES: Record<string, { bg: string; label: string }> = {
   VIDEO: { bg: "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400", label: "Video" },
@@ -24,7 +25,7 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 
 export default function LessonsPage() {
   const { user } = useAuth();
-  const { getCourse, getCourseLessons, enrolledIds, completedLessonIds } = useCourses();
+  const { getCourse, getCourseLessons, enrolledIds, completedLessonIds, isLoading } = useCourses();
   const params = useParams();
   const router = useRouter();
   
@@ -36,6 +37,15 @@ export default function LessonsPage() {
   
   const isEnrolled = user?.role === "STUDENT" ? enrolledIds.includes(courseId) : true;
   const canAccess = user?.role !== "STUDENT" || isEnrolled;
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <Loader size="lg" />
+        <p className="text-sm text-muted-foreground font-medium">Loading lessons...</p>
+      </div>
+    );
+  }
 
   if (!course) {
     return (
@@ -60,7 +70,7 @@ export default function LessonsPage() {
     );
   }
 
-  const completedCount = lessons.filter((l: any) => completedLessonIds.includes(l.id)).length;
+  const completedCount = lessons.filter((l: { id: number }) => completedLessonIds.includes(l.id)).length;
   const progressPct = lessons.length > 0 ? Math.round((completedCount / lessons.length) * 100) : 0;
 
   return (
@@ -98,7 +108,7 @@ export default function LessonsPage() {
             <p className="font-semibold text-foreground">No lessons available yet</p>
           </div>
         ) : (
-          lessons.map((lesson: any, i: number) => {
+          lessons.map((lesson: { id: number; title: string; type?: string; duration: string; xpReward: number }, i: number) => {
             const isDone = completedLessonIds.includes(lesson.id);
             const TypeIcon = TYPE_ICONS[lesson.type || "TEXT"] || Play;
             const typeStyle = TYPE_STYLES[lesson.type || "TEXT"] || TYPE_STYLES["TEXT"];
@@ -118,7 +128,7 @@ export default function LessonsPage() {
                   {isDone ? (
                     <CheckCircle2 className="w-5 h-5 text-white" />
                   ) : (
-                    <Orbit className="w-10 h-10 text-primary mx-auto mb-4 animate-pulse" />
+                    <TypeIcon className="w-5 h-5 text-primary" />
                   )}
                 </div>
 

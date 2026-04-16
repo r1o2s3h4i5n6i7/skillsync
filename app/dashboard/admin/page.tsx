@@ -1,80 +1,165 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useCourses } from "@/lib/course-context";
+import { useSearchParams } from "next/navigation";
+import { Loader } from "@/components/Loader";
+import Image from "next/image";
+import { getAvatarPath } from "@/types/auth";
+import type { AdminDashboardData, LeaderboardEntry } from "@/types/dashboard";
+import type { CourseListItem } from "@/types/course";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import {
-  ADMIN_STATS, ADMIN_MONTHLY_DATA, DEMO_USERS, DEMO_COURSES
-} from "@/lib/demo-data";
 import {
   Users, BookOpen, TrendingUp, BarChart3, Settings,
   Shield, UserCheck, Award, Activity, Orbit,
-  CheckCircle2, XCircle, ChevronUp, Zap, Flag
+  CheckCircle2, XCircle, ChevronUp, Zap, Flag, Star, Search, Filter,
 } from "lucide-react";
 import Link from "next/link";
 
 const FADE_UP = { initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.4 } };
 const stagger = (i: number) => ({ ...FADE_UP, transition: { ...FADE_UP.transition, delay: i * 0.07 } });
 
-const ROLE_STYLES = {
+const ROLE_STYLES: Record<string, { color: string; label: string; icon: React.ElementType }> = {
   STUDENT: { color: "from-pink-500 to-rose-500", label: "Student", icon: Orbit },
   TEACHER: { color: "from-blue-500 to-cyan-500", label: "Teacher", icon: UserCheck },
   ADMIN:   { color: "from-rose-500 to-pink-500", label: "Admin", icon: Shield },
 };
 
 function AdminDashboardContent() {
- const { user } = useAuth();
-  if (!user) {
-    return null;
-  }
+  const { user } = useAuth();
+  const { courses, isLoading: coursesLoading } = useCourses();
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const tabParam = typeof window !== "undefined"
-    ? (searchParams.get("tab") as "overview" | "users" | "courses" | "system" | null)
-    : null;
+  const tabParam = searchParams.get("tab") as "overview" | "users" | "courses" | "system" | null;
   const [activeTab, setActiveTab] = useState<"overview" | "users" | "courses" | "system">(tabParam ?? "overview");
-  const [userSearch, setUserSearch] = useState("");
+  
+  const [dashData, setDashData] = useState<AdminDashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Sync tab when URL changes (e.g. from sidebar click)
+  // Admin Users Search & Pagination
+  const [userSearch, setUserSearch] = useState("");
+  const [usersPage, setUsersPage] = useState(1);
+  const [adminUsers, setAdminUsers] = useState<LeaderboardEntry[]>([]);
+  const [totalUserPages, setTotalUserPages] = useState(1);
+  const [userRoleFilter, setUserRoleFilter] = useState("ALL");
+  const [usersLoading, setUsersLoading] = useState(false);
+
+  // Admin Courses Search & Pagination
+  const [courseSearch, setCourseSearch] = useState("");
+  const [coursesPage, setCoursesPage] = useState(1);
+  const [adminCourses, setAdminCourses] = useState<CourseListItem[]>([]);
+  const [totalCoursePages, setTotalCoursePages] = useState(1);
+  const [courseSubjectFilter, setCourseSubjectFilter] = useState("ALL");
+  const [courseDifficultyFilter, setCourseDifficultyFilter] = useState("ALL");
+  const [adminCoursesLoading, setAdminCoursesLoading] = useState(false);
+
   useEffect(() => {
     if (tabParam && ["overview", "users", "courses", "system"].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
 
-  const filteredUsers = DEMO_USERS.filter((u) =>
-    u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
-    u.email.toLowerCase().includes(userSearch.toLowerCase())
-  );
+  const fetchDashboard = useCallback(async () => {
+    try {
+      const res = await fetch("/api/dashboard/admin");
+      if (res.ok) {
+        const data: AdminDashboardData = await res.json();
+        setDashData(data);
+      }
+    } catch (err) {
+      console.error("Admin dashboard fetch error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const maxEnroll = Math.max(...ADMIN_MONTHLY_DATA.map((d) => d.enrollments));
+  useEffect(() => {
+    if (user) fetchDashboard();
+  }, [user, fetchDashboard]);
+
+  const fetchUsers = useCallback(async () => {
+    setUsersLoading(true);
+    try {
+      const res = await fetch(`/api/admin/users?page=${usersPage}&limit=10&search=${encodeURIComponent(userSearch)}&role=${userRoleFilter}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAdminUsers(data.users);
+        setTotalUserPages(data.totalPages);
+      }
+    } finally {
+      setUsersLoading(false);
+    }
+  }, [usersPage, userSearch, userRoleFilter]);
+
+  useEffect(() => {
+    if (user && activeTab === "users") fetchUsers();
+  }, [user, activeTab, fetchUsers]);
+
+  const fetchAdminCourses = useCallback(async () => {
+    setAdminCoursesLoading(true);
+    try {
+      const res = await fetch(`/api/admin/courses?page=${coursesPage}&limit=6&search=${encodeURIComponent(courseSearch)}&subject=${courseSubjectFilter}&difficulty=${courseDifficultyFilter}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAdminCourses(data.courses);
+        setTotalCoursePages(data.totalPages);
+      }
+    } finally {
+      setAdminCoursesLoading(false);
+    }
+  }, [coursesPage, courseSearch, courseSubjectFilter, courseDifficultyFilter]);
+
+  useEffect(() => {
+    if (user && activeTab === "courses") fetchAdminCourses();
+  }, [user, activeTab, fetchAdminCourses]);
+
+  if (!user) return null;
+
+  if (isLoading || coursesLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <Loader size="lg" />
+        <p className="text-sm text-muted-foreground font-medium">Loading admin dashboard...</p>
+      </div>
+    );
+  }
+
+  const stats = dashData?.stats;
 
   const TABS = [
-    { id: "overview", label: "Overview" },
-    { id: "users", label: `Users (${ADMIN_STATS.totalUsers.toLocaleString()})` },
-    { id: "courses", label: "Courses" },
-    { id: "system", label: "System" },
-  ] as const;
+    { id: "overview" as const, label: "Overview" },
+    { id: "users" as const, label: `Users (${stats?.totalUsers ?? 0})` },
+    { id: "courses" as const, label: "Courses" },
+    { id: "system" as const, label: "System" },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
       <motion.div {...FADE_UP} className="relative overflow-hidden brand-gradient rounded-2xl p-6 text-white shadow-xl shadow-pink-500/20">
         <div className="relative z-10 flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Shield className="w-4 h-4 text-white/70" />
-              <p className="text-white/70 text-sm font-medium">Admin Control Panel</p>
+          <div className="flex items-center gap-4">
+            <Image
+              src={getAvatarPath(user.role)}
+              alt="Admin avatar"
+              width={56}
+              height={56}
+              className="w-14 h-14 rounded-2xl object-cover shadow-lg border-2 border-white/30"
+            />
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Shield className="w-4 h-4 text-white/70" />
+                <p className="text-white/70 text-sm font-medium">Admin Control Panel</p>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold">{user?.name}</h1>
+              <p className="text-white/80 text-sm mt-1">{user?.city} · Super Admin</p>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold">{user?.name}</h1>
-            <p className="text-white/80 text-sm mt-1">{user?.city} · Super Admin</p>
           </div>
           <div className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2 text-center shrink-0">
-            <p className="text-xl font-extrabold">{ADMIN_STATS.activeThisMonth.toLocaleString()}</p>
-            <p className="text-xs text-white/70">Active this month</p>
+            <p className="text-xl font-extrabold">{stats?.totalEnrollments ?? 0}</p>
+            <p className="text-xs text-white/70">Total Enrollments</p>
           </div>
         </div>
         <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-white/5" />
@@ -84,10 +169,10 @@ function AdminDashboardContent() {
       {/* Top stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Total Users", value: ADMIN_STATS.totalUsers.toLocaleString(), icon: Users, color: "from-pink-500 to-rose-600", change: `+${ADMIN_STATS.newThisMonth} this month` },
-          { label: "Total Courses", value: ADMIN_STATS.totalCourses, icon: BookOpen, color: "from-blue-500 to-cyan-500", change: "8 subjects" },
-          { label: "Enrollments", value: ADMIN_STATS.totalEnrollments.toLocaleString(), icon: TrendingUp, color: "from-emerald-400 to-green-500", change: "All time" },
-          { label: "Completion Rate", value: `${ADMIN_STATS.courseCompletionRate}%`, icon: CheckCircle2, color: "from-amber-400 to-orange-500", change: "Avg quiz: " + ADMIN_STATS.avgQuizScore + "%" },
+          { label: "Total Users", value: stats?.totalUsers ?? 0, icon: Users, color: "from-pink-500 to-rose-600", change: `${stats?.totalStudents ?? 0} students` },
+          { label: "Total Courses", value: stats?.totalCourses ?? 0, icon: BookOpen, color: "from-blue-500 to-cyan-500", change: `${stats?.totalTeachers ?? 0} teachers` },
+          { label: "Enrollments", value: stats?.totalEnrollments ?? 0, icon: TrendingUp, color: "from-emerald-400 to-green-500", change: "All time" },
+          { label: "Completion Rate", value: `${stats?.courseCompletionRate ?? 0}%`, icon: CheckCircle2, color: "from-amber-400 to-orange-500", change: `Avg quiz: ${stats?.avgQuizScore ?? 0}%` },
         ].map((stat, i) => (
           <motion.div key={stat.label} {...stagger(i)}
             className="bg-card border border-border rounded-2xl p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow">
@@ -121,66 +206,146 @@ function AdminDashboardContent() {
       {/* OVERVIEW TAB */}
       {activeTab === "overview" && (
         <div className="flex flex-col gap-5">
-          {/* Growth chart */}
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <h3 className="font-bold text-foreground mb-1 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-primary" /> Enrollment Growth (Last 6 Months)
-            </h3>
-            <p className="text-sm text-muted-foreground">Monitor and manage the IT Training ecosystem</p>
-            <div className="flex items-end gap-3 h-28">
-              {ADMIN_MONTHLY_DATA.map((month, i) => {
-                const h = Math.round((month.enrollments / maxEnroll) * 100);
-                return (
-                  <div key={month.month} className="flex-1 flex flex-col items-center gap-1.5">
-                    <div className="relative w-full flex justify-center group">
-                      <motion.div
-                        initial={{ height: 0 }}
-                        animate={{ height: `${h}%` }}
-                        transition={{ duration: 0.7, delay: i * 0.1, ease: "easeOut" }}
-                        className="w-full max-w-[32px] brand-gradient rounded-t-md min-h-[4px]"
-                      />
-                      <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 transition-opacity bg-card border border-border rounded-lg px-2 py-1 text-[10px] font-semibold text-foreground whitespace-nowrap shadow-lg z-10">
-                        {month.enrollments.toLocaleString()}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Enrollment Trend */}
+            <div className="bg-card border border-border rounded-2xl p-5 flex flex-col">
+              <h3 className="font-bold text-foreground mb-6 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-primary" /> Enrollment Growth (14d)
+              </h3>
+              <div className="h-48 flex items-end gap-1.5 px-2 relative">
+                {dashData?.dailyEnrollments.map((day, i) => {
+                  const maxCount = Math.max(...dashData.dailyEnrollments.map(d => d.count), 5);
+                  const h = (day.count / maxCount) * 100;
+                  return (
+                    <div key={day.date} className="flex-1 flex flex-col items-center gap-2 group relative">
+                       <div className="relative w-full flex-1 flex flex-col justify-end">
+                          <motion.div 
+                            initial={{ height: 0 }}
+                            animate={{ height: `${Math.max(4, h)}%` }}
+                            className="w-full bg-primary/20 hover:bg-primary/40 rounded-t-sm transition-colors cursor-pointer"
+                          />
+                          <div className="absolute -top-8 px-2 py-1 bg-foreground text-background text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                            {day.count} enrollments
+                          </div>
+                       </div>
+                       <span className="text-[8px] text-muted-foreground font-bold rotate-45 mt-1">{day.date.split("-").slice(1).join("/")}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Category Distribution */}
+            <div className="bg-card border border-border rounded-2xl p-5">
+               <h3 className="font-bold text-foreground mb-6 flex items-center gap-2">
+                <Orbit className="w-4 h-4 text-primary" /> Subject Distribution
+              </h3>
+              <div className="flex flex-col gap-4">
+                {dashData?.categoryDistribution.map((cat, i) => {
+                  const maxCount = Math.max(...dashData.categoryDistribution.map(c => c.count), 1);
+                  const pct = Math.round((cat.count / maxCount) * 100);
+                  return (
+                    <div key={cat.subject} className="space-y-1.5">
+                      <div className="flex justify-between text-[10px] font-bold">
+                        <span className="text-muted-foreground uppercase">{cat.subject}</span>
+                        <span className="text-foreground">{cat.count} courses</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          className="h-full brand-gradient rounded-full"
+                        />
                       </div>
                     </div>
-                    <span className="text-[10px] text-muted-foreground">{month.month}</span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* Role distribution */}
-          <div className="bg-card border border-border rounded-2xl p-5">
-            <h3 className="font-bold text-foreground mb-4 flex items-center gap-2">
-              <Users className="w-4 h-4 text-primary" /> User Distribution
-            </h3>
-            <div className="flex flex-col gap-3">
-              {[
-                { label: "Students", count: ADMIN_STATS.totalStudents, total: ADMIN_STATS.totalUsers, color: "from-pink-500 to-rose-500" },
-                { label: "Teachers", count: ADMIN_STATS.totalTeachers, total: ADMIN_STATS.totalUsers, color: "from-blue-500 to-cyan-500" },
-                { label: "Admins", count: ADMIN_STATS.totalAdmins, total: ADMIN_STATS.totalUsers, color: "from-rose-500 to-pink-500" },
-              ].map((role) => {
-                const pct = Math.round((role.count / role.total) * 100);
-                return (
-                  <div key={role.label} className="flex items-center gap-3">
-                    <span className="w-16 text-xs font-medium text-muted-foreground">{role.label}</span>
-                    <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
-                        transition={{ duration: 0.9, ease: "easeOut" }}
-                        className={`h-full bg-gradient-to-r ${role.color} rounded-full`}
-                      />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+             {/* Role distribution */}
+            <div className="bg-card border border-border rounded-2xl p-5">
+              <h3 className="font-bold text-foreground mb-4 flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" /> User Distribution
+              </h3>
+              <div className="flex flex-col gap-3">
+                {[
+                  { label: "Students", count: stats?.totalStudents ?? 0, total: stats?.totalUsers ?? 1, color: "from-pink-500 to-rose-500" },
+                  { label: "Teachers", count: stats?.totalTeachers ?? 0, total: stats?.totalUsers ?? 1, color: "from-blue-500 to-cyan-500" },
+                  { label: "Admins", count: (stats?.totalUsers ?? 0) - (stats?.totalStudents ?? 0) - (stats?.totalTeachers ?? 0), total: stats?.totalUsers ?? 1, color: "from-rose-500 to-pink-500" },
+                ].map((role) => {
+                  const pct = role.total > 0 ? Math.round((role.count / role.total) * 100) : 0;
+                  return (
+                    <div key={role.label} className="flex items-center gap-3">
+                      <span className="w-16 text-xs font-medium text-muted-foreground">{role.label}</span>
+                      <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ duration: 0.9, ease: "easeOut" }}
+                          className={`h-full bg-gradient-to-r ${role.color} rounded-full`}
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 w-20 text-right justify-end">
+                        <span className="text-xs font-bold text-foreground">{role.count}</span>
+                        <span className="text-[10px] text-muted-foreground">({pct}%)</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 w-20 text-right justify-end">
-                      <span className="text-xs font-bold text-foreground">{role.count.toLocaleString()}</span>
-                      <span className="text-[10px] text-muted-foreground">({pct}%)</span>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Top Performing Courses */}
+            <div className="bg-card border border-border rounded-2xl p-5">
+               <h3 className="font-bold text-foreground mb-4 flex items-center gap-2">
+                <Award className="w-4 h-4 text-primary" /> Top Performing Courses
+              </h3>
+              <div className="flex flex-col gap-2">
+                {dashData?.topCourses.map((c, i) => (
+                  <div key={c.id} className="flex items-center gap-3 p-3 bg-muted/20 rounded-xl border border-border/50">
+                    <div className="w-8 h-8 rounded-lg brand-gradient flex items-center justify-center shrink-0">
+                      <span className="text-xs font-bold text-white">#{i+1}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold truncate">{c.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                         <span className="text-[9px] font-bold text-muted-foreground flex items-center gap-1">
+                           <Users className="w-2 h-2" /> {c.enrolled} Enrolled
+                         </span>
+                         <span className="text-[9px] font-bold text-emerald-500 flex items-center gap-1">
+                           <Star className="w-2 h-2 fill-emerald-500" /> {c.rating}
+                         </span>
+                      </div>
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
+          </div>
+
+          {/* Platform health summary */}
+          <div className="bg-gradient-to-br from-pink-50 to-blue-50 dark:from-pink-900/10 dark:to-blue-900/10 border border-pink-200/40 dark:border-pink-700/20 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 brand-gradient rounded-lg flex items-center justify-center shadow-md shadow-pink-500/20">
+                <Orbit className="w-5 h-5 text-white" />
+              </div>
+              <p className="text-sm font-bold text-primary">Platform Insights</p>
+            </div>
+            <ul className="flex flex-col gap-2">
+              {[
+                `${stats?.totalUsers ?? 0} users on the platform with ${stats?.totalEnrollments ?? 0} total enrollments.`,
+                `Average course completion rate: ${stats?.courseCompletionRate ?? 0}%`,
+                `Average quiz score across all students: ${stats?.avgQuizScore ?? 0}%`,
+              ].map((tip, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                  <Zap className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                  {tip}
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}
@@ -188,18 +353,37 @@ function AdminDashboardContent() {
       {/* USERS TAB */}
       {activeTab === "users" && (
         <div className="flex flex-col gap-4">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search users..."
-              value={userSearch}
-              onChange={(e) => setUserSearch(e.target.value)}
-              className="w-full pl-4 pr-4 py-3 bg-card border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-            />
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={userSearch}
+                onChange={(e) => { setUserSearch(e.target.value); setUsersPage(1); }}
+                className="w-full pl-4 pr-10 py-3 bg-card border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm"
+              />
+              <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            </div>
+            <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-3 py-1.5 shadow-sm">
+              <Filter className="w-4 h-4 text-primary" />
+              <select 
+                value={userRoleFilter} 
+                onChange={(e) => { setUserRoleFilter(e.target.value); setUsersPage(1); }}
+                className="bg-transparent text-sm font-semibold focus:outline-none cursor-pointer pr-2"
+              >
+                <option value="ALL">All Roles</option>
+                <option value="STUDENT">Students</option>
+                <option value="TEACHER">Teachers</option>
+                <option value="ADMIN">Admins</option>
+              </select>
+            </div>
           </div>
-          <div className="flex flex-col gap-2">
-            {filteredUsers.map((u, i) => {
-              const roleStyle = ROLE_STYLES[u.role];
+          {usersLoading ? (
+            <div className="flex justify-center p-8"><Loader /></div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {adminUsers.map((u, i) => {
+                const roleStyle = ROLE_STYLES[u.role] ?? ROLE_STYLES.STUDENT;
               const RoleIcon = roleStyle.icon;
               return (
                 <motion.div key={u.id}
@@ -208,9 +392,13 @@ function AdminDashboardContent() {
                   transition={{ delay: i * 0.04 }}
                   className="flex items-center gap-4 p-4 bg-card border border-border rounded-2xl hover:bg-muted/30 transition-colors"
                 >
-                  <div className="w-10 h-10 brand-gradient rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-md shadow-pink-500/20">
-                    {u.avatar}
-                  </div>
+                  <Image
+                    src={getAvatarPath(u.role as "STUDENT" | "TEACHER" | "ADMIN")}
+                    alt={`${u.role} avatar`}
+                    width={40}
+                    height={40}
+                    className="w-10 h-10 rounded-xl object-cover shadow-md"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-sm text-foreground">{u.name}</p>
@@ -218,7 +406,6 @@ function AdminDashboardContent() {
                         <RoleIcon className="w-2.5 h-2.5" /> {roleStyle.label}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span>{u.city}</span>
                       <span className="text-primary font-semibold">Lv.{u.level}</span>
@@ -245,14 +432,66 @@ function AdminDashboardContent() {
               );
             })}
           </div>
+          )}
+          {totalUserPages > 1 && (
+            <div className="flex items-center justify-center gap-4 mt-2">
+              <button disabled={usersPage === 1} onClick={() => setUsersPage(p => p - 1)} className="px-3 py-1 bg-card rounded-md border text-sm disabled:opacity-50">Prev</button>
+              <span className="text-sm font-semibold">{usersPage} / {totalUserPages}</span>
+              <button disabled={usersPage === totalUserPages} onClick={() => setUsersPage(p => p + 1)} className="px-3 py-1 bg-card rounded-md border text-sm disabled:opacity-50">Next</button>
+            </div>
+          )}
         </div>
       )}
 
       {/* COURSES TAB */}
       {activeTab === "courses" && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {DEMO_COURSES.map((course, i) => (
-            <motion.div key={course.id}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col lg:flex-row gap-3">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Search courses..."
+                value={courseSearch}
+                onChange={(e) => { setCourseSearch(e.target.value); setCoursesPage(1); }}
+                className="w-full pl-4 pr-10 py-3 bg-card border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all shadow-sm"
+              />
+              <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-3 py-1.5 shadow-sm">
+                <BookOpen className="w-4 h-4 text-primary" />
+                <select 
+                  value={courseSubjectFilter} 
+                  onChange={(e) => { setCourseSubjectFilter(e.target.value); setCoursesPage(1); }}
+                  className="bg-transparent text-sm font-semibold focus:outline-none cursor-pointer pr-2"
+                >
+                  <option value="ALL">All Subjects</option>
+                  <option value="Development">Development</option>
+                  <option value="Design">Design</option>
+                  <option value="Business">Business</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-3 py-1.5 shadow-sm">
+                <Activity className="w-4 h-4 text-primary" />
+                <select 
+                  value={courseDifficultyFilter} 
+                  onChange={(e) => { setCourseDifficultyFilter(e.target.value); setCoursesPage(1); }}
+                  className="bg-transparent text-sm font-semibold focus:outline-none cursor-pointer pr-2"
+                >
+                  <option value="ALL">All Levels</option>
+                  <option value="EASY">Easy</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="HARD">Hard</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          {adminCoursesLoading ? (
+            <div className="flex justify-center p-8"><Loader /></div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {adminCourses.map((course, i) => (
+                <motion.div key={course.id}
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
@@ -279,23 +518,24 @@ function AdminDashboardContent() {
                     <p className="text-[10px] text-muted-foreground">Rating</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Link href={`/courses/${course.id}`} className="flex-1">
-                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                      className="w-full brand-gradient text-white text-xs font-semibold py-2 rounded-lg shadow-sm">
-                      View
-                    </motion.button>
-                  </Link>
-                  {/* <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                    onClick={() => router.push(`/dashboard/teacher/courses/edit/${course.id}`)}
-                    className="flex-1 bg-muted hover:bg-muted/80 text-xs font-semibold py-2 rounded-lg text-foreground transition-colors relative overflow-hidden group">
-                    <span className="relative z-10 flex items-center justify-center gap-1.5"><Settings className="w-3.5 h-3.5" /> Manage & Edit</span>
-                    <div className="absolute inset-0 brand-gradient opacity-0 group-hover:opacity-10 transition-opacity" />
-                  </motion.button> */}
-                </div>
+                <Link href={`/courses/${course.id}`}>
+                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                    className="w-full brand-gradient text-white text-xs font-semibold py-2 rounded-lg shadow-sm">
+                    View
+                  </motion.button>
+                </Link>
               </div>
             </motion.div>
           ))}
+          </div>
+          )}
+          {totalCoursePages > 1 && (
+            <div className="flex items-center justify-center gap-4 mt-2">
+              <button disabled={coursesPage === 1} onClick={() => setCoursesPage(p => p - 1)} className="px-3 py-1 bg-card rounded-md border text-sm disabled:opacity-50">Prev</button>
+              <span className="text-sm font-semibold">{coursesPage} / {totalCoursePages}</span>
+              <button disabled={coursesPage === totalCoursePages} onClick={() => setCoursesPage(p => p + 1)} className="px-3 py-1 bg-card rounded-md border text-sm disabled:opacity-50">Next</button>
+            </div>
+          )}
         </div>
       )}
 

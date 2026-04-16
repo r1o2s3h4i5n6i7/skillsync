@@ -1,21 +1,26 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
+import { getAvatarPath } from "@/types/auth";
+import type { NotificationData } from "@/types/dashboard";
 import {
   Bell, LogOut, User, Settings, ChevronDown, X, CheckCircle2,
   Brain, BookOpen, Trophy, Unlock, ClipboardCheck, Users, AlertCircle, UserPlus,
-  LayoutGrid, Clock, Search, Menu
+  LayoutGrid, Clock, Search, Menu, Flame, Target, Globe, Sparkles,
+  FileCheck, FileText, BarChart, TrendingUp, Zap, Rocket, PenTool, Award
 } from "lucide-react";
 import Link from "next/link";
-import { DEMO_NOTIFICATIONS, type DemoNotification } from "@/lib/demo-data";
+import Image from "next/image";
 import { ThemeToggle } from "./ThemeToggle";
 
 const NOTIF_ICONS: Record<string, React.ElementType> = {
-  Trophy, CheckCircle2, Brain, BookOpen, Unlock, ClipboardCheck, Users, AlertCircle, UserPlus
+  Trophy, CheckCircle2, Brain, BookOpen, Unlock, ClipboardCheck, Users, AlertCircle, UserPlus,
+  Bell, Flame, Target, Globe, Sparkles, FileCheck, FileText, BarChart, TrendingUp, Zap,
+  Rocket, PenTool, Award,
 };
 
 function NotifIcon({ icon }: { icon: string }) {
@@ -29,14 +34,30 @@ export default function Navbar() {
   const { user, logout } = useAuth();
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
-  const [notifications, setNotifications] = useState<DemoNotification[]>([]);
-  
-  // Update notifications when user role is available
-  useEffect(() => {
-    if (user) {
-      setNotifications(DEMO_NOTIFICATIONS.filter(n => n.role === user.role));
+  const [notifications, setNotifications] = useState<NotificationData[]>([]);
+  const [isLoadingNotifs, setIsLoadingNotifs] = useState(false);
+
+  // Fetch notifications from API
+  const fetchNotifications = useCallback(async () => {
+    if (!user) return;
+    setIsLoadingNotifs(true);
+    try {
+      const res = await fetch("/api/notifications");
+      if (res.ok) {
+        const data: { notifications: NotificationData[] } = await res.json();
+        setNotifications(data.notifications);
+      }
+    } catch (err) {
+      console.error("Failed to fetch notifications:", err);
+    } finally {
+      setIsLoadingNotifs(false);
     }
   }, [user]);
+
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
+
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -51,7 +72,33 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const markAllRead = () => setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  const markAllRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markAllRead: true }),
+      });
+    } catch {
+      // fail silently — UI already updated
+    }
+  };
+
+  const markOneRead = async (notifId: number) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notifId ? { ...n, isRead: true } : n))
+    );
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notificationId: notifId }),
+      });
+    } catch {
+      // fail silently
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -137,11 +184,16 @@ export default function Navbar() {
                     </div>
                   </div>
                   <div className="max-h-80 overflow-y-auto">
+                    {notifications.length === 0 && (
+                      <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                        No notifications yet
+                      </div>
+                    )}
                     {notifications.map((notif) => (
                       <motion.div
                         key={notif.id}
                         whileHover={{ scale: 0.98 }}
-                        onClick={() => setNotifications((prev) => prev.map((n) => n.id === notif.id ? { ...n, isRead: true } : n))}
+                        onClick={() => markOneRead(notif.id)}
                         className={`flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-border/50 last:border-0 transition-colors ${!notif.isRead ? "bg-pink-50/50 dark:bg-pink-900/10" : "hover:bg-pink-50/30 dark:hover:bg-pink-900/5"}`}
                       >
                         <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${notifColors[notif.type] || "from-pink-400 to-blue-400"} flex items-center justify-center shrink-0 text-white`}>
@@ -173,9 +225,13 @@ export default function Navbar() {
               onClick={() => { setShowProfile(!showProfile); setShowNotifs(false); }}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border hover:bg-muted transition-colors"
             >
-              <div className="w-7 h-7 rounded-lg brand-gradient flex items-center justify-center text-white text-xs font-bold shadow">
-                {user.avatar}
-              </div>
+              <Image
+                src={getAvatarPath(user.role)}
+                alt={`${user.role} avatar`}
+                width={28}
+                height={28}
+                className="w-7 h-7 rounded-lg object-cover shadow"
+              />
               <div className="hidden sm:block text-left">
                 <p className="text-xs font-semibold text-foreground leading-tight">{user.name.split(" ")[0]}</p>
                 <p className="text-[10px] text-muted-foreground capitalize">{user.role.toLowerCase()}</p>
@@ -192,14 +248,23 @@ export default function Navbar() {
                   transition={{ duration: 0.15 }}
                   className="absolute right-0 mt-2 w-52 bg-card border border-border rounded-2xl shadow-2xl shadow-pink-500/10 overflow-hidden z-50"
                 >
-                  <div className="px-4 py-3 border-b border-border">
-                    <p className="font-semibold text-sm text-foreground">{user.name}</p>
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
-                    {user.role !== "ADMIN" && (
-                      <div className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full brand-gradient text-white text-[10px] font-semibold">
-                        Level {user.level} · {user.xp.toLocaleString()} XP
-                      </div>
-                    )}
+                  <div className="px-4 py-3 border-b border-border flex items-center gap-3">
+                    <Image
+                      src={getAvatarPath(user.role)}
+                      alt={`${user.role} avatar`}
+                      width={36}
+                      height={36}
+                      className="w-9 h-9 rounded-lg object-cover shadow"
+                    />
+                    <div>
+                      <p className="font-semibold text-sm text-foreground">{user.name}</p>
+                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                      {user.role !== "ADMIN" && (
+                        <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full brand-gradient text-white text-[10px] font-semibold">
+                          Level {user.level} · {user.xp.toLocaleString()} XP
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="py-1.5">
                     <Link href="/profile" className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors" onClick={() => setShowProfile(false)}>

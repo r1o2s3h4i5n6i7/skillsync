@@ -503,22 +503,8 @@ const STYLE_COLORS = [
 ];
 
 export default function LessonContentEngine({ content, lessonId, lessonTitle }: Props) {
-  const [styleIndex, setStyleIndex] = useState<number | null>(null);
-
-  useEffect(() => {
-    // Pick a random style on mount as requested
-    const randomIndex = Math.floor(Math.random() * STYLES.length);
-    setStyleIndex(randomIndex);
-  }, []);
-
-  if (styleIndex === null) {
-    return (
-      <div className="h-64 flex flex-col items-center justify-center gap-4 bg-muted/20 border border-border rounded-3xl animate-pulse">
-        <Sparkles className="w-8 h-8 text-primary animate-spin" />
-        <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest">AI Generating Layout...</p>
-      </div>
-    );
-  }
+  // Deterministic style picking based on lessonId
+  const styleIndex = lessonId % STYLES.length;
 
   const Component = STYLES[styleIndex];
   const styleName = STYLE_NAMES[styleIndex];
@@ -546,7 +532,7 @@ export default function LessonContentEngine({ content, lessonId, lessonTitle }: 
           <p className={`text-xs font-black ${styleColor}`}>{styleName} Rendering</p>
         </div>
         <div className="h-6 w-px bg-border mx-1" />
-        <span className="text-[10px] font-bold text-muted-foreground/60 uppercase">SEED_RAND_{Math.floor(Math.random() * 9999)}</span>
+        <span className="text-[10px] font-bold text-muted-foreground/60 uppercase">SEED_RAND_{lessonId}</span>
       </motion.div>
 
       <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>

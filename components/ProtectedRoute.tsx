@@ -3,13 +3,12 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { motion } from "framer-motion";
-import { Orbit, ShieldAlert } from "lucide-react";
-import type { Role } from "@/lib/demo-data";
+import { Loader } from "@/components/Loader";
+import type { UserRole } from "@/types/auth";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles: Role[];
+  allowedRoles: UserRole[];
 }
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
@@ -31,9 +30,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
-        <div className="w-16 h-16 rounded-2xl brand-gradient flex items-center justify-center shadow-lg shadow-pink-500/20 mb-6">
-              <Orbit className="w-8 h-8 text-white" />
-            </div>
+        <Loader size="xl" />
       </div>
     );
   }

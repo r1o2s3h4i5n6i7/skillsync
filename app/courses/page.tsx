@@ -1,40 +1,65 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 export const dynamic = "force-dynamic";
 import { useAuth } from "@/lib/auth-context";
 import { useCourses } from "@/lib/course-context";
-import { BookOpen, Search, Star, Clock, Users, Play, CheckCircle2, Lock } from "lucide-react";
+import { Loader } from "@/components/Loader";
+import { BookOpen, Search, Star, Clock, Users, Play, CheckCircle2, Lock, Filter } from "lucide-react";
 import Link from "next/link";
+import type { CourseListItem } from "@/types/course";
 
 const SUBJECTS = ["All", "Cloud", "AI", "Mobile", "Security", "DevOps", "Database", "Web Development", "Programming"];
 const DIFFICULTY_COLORS = { EASY: "from-emerald-400 to-green-500", MEDIUM: "from-amber-400 to-orange-400", HARD: "from-rose-400 to-red-500" };
 
 export default function CoursesPage() {
   const { user } = useAuth();
-  const { courses, enrolledIds, enrollCourse } = useCourses();
-  
+  const { courses, enrolledIds, enrollCourse, isLoading } = useCourses();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
+  const [coursesPage, setCoursesPage] = useState(1);
+  const [displayCourses, setDisplayCourses] = useState<CourseListItem[]>([]);
+  const [totalCoursePages, setTotalCoursePages] = useState(1);
+  const [coursesLoading, setCoursesLoading] = useState(false);
+
+  const fetchCourses = useCallback(async () => {
+    setCoursesLoading(true);
+    try {
+      const subjectQuery = filter !== "All" ? `&subject=${encodeURIComponent(filter)}` : "";
+      const res = await fetch(`/api/courses?page=${coursesPage}&limit=6&search=${encodeURIComponent(search)}${subjectQuery}`);
+      if (res.ok) {
+        const data = await res.json();
+        let fetchedCourses = data.courses;
+        // If teacher, optionally filter only their courses?
+        // Wait, the public Courses page usually shows all available courses for enrollment.
+        // But previously it filtered instructorId === user.id if TEACHER.
+        if (user?.role === "TEACHER") {
+          fetchedCourses = fetchedCourses.filter((c: CourseListItem) => c.instructorId === user.id);
+        }
+        setDisplayCourses(fetchedCourses);
+        setTotalCoursePages(data.totalPages || 1);
+      }
+    } finally {
+      setCoursesLoading(false);
+    }
+  }, [coursesPage, search, filter, user]);
+
+  useEffect(() => {
+    if (user) fetchCourses();
+  }, [user, fetchCourses]);
 
   if (!user) return null;
 
-  // Get courses based on user role
-  let coursesToShow = courses;
-  if (user?.role === "TEACHER") {
-    // Teachers see only their courses
-    coursesToShow = courses.filter((c) => c.instructorId === user.id);
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <Loader size="lg" />
+        <p className="text-sm text-muted-foreground font-medium">Loading...</p>
+      </div>
+    );
   }
-
-  const filtered = coursesToShow.filter((c) => {
-    const matchSearch = c.title.toLowerCase().includes(search.toLowerCase()) ||
-      c.description.toLowerCase().includes(search.toLowerCase()) ||
-      c.instructor.toLowerCase().includes(search.toLowerCase());
-    const matchFilter = filter === "All" || c.subject === filter;
-    return matchSearch && matchFilter;
-  });
 
   const handleEnroll = (id: number, title: string) => {
     if (!user) { toast.error("Please sign in to enroll."); return; }
@@ -83,7 +108,14 @@ export default function CoursesPage() {
 
       {/* Courses grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filtered.map((course, i) => {
+        {coursesLoading ? (
+          <div className="col-span-full py-12 flex justify-center"><Loader /></div>
+        ) : displayCourses.length === 0 ? (
+          <div className="col-span-full py-16 text-center bg-card border border-border rounded-3xl mt-4">
+             <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
+             <p className="font-semibold text-foreground">No courses found matching your criteria.</p>
+          </div>
+        ) : displayCourses.map((course, i) => {
           const isEnrolled = enrolledIds.includes(course.id);
           return (
             <motion.div key={course.id}
@@ -163,11 +195,11 @@ export default function CoursesPage() {
         })}
       </div>
 
-      {filtered.length === 0 && (
-        <div className="text-center py-16">
-          <BookOpen className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="font-semibold text-foreground">No courses found</p>
-          <p className="text-sm text-muted-foreground">Try a different search or filter</p>
+      {totalCoursePages > 1 && (
+        <div className="flex items-center justify-center gap-4 mt-8">
+          <button disabled={coursesPage === 1} onClick={() => setCoursesPage(p => p - 1)} className="px-4 py-2 bg-card rounded-xl border text-sm font-semibold disabled:opacity-50 transition-colors hover:bg-muted">Prev</button>
+          <span className="text-sm font-bold">{coursesPage} / {totalCoursePages}</span>
+          <button disabled={coursesPage === totalCoursePages} onClick={() => setCoursesPage(p => p + 1)} className="px-4 py-2 bg-card rounded-xl border text-sm font-semibold disabled:opacity-50 transition-colors hover:bg-muted">Next</button>
         </div>
       )}
     </div>

@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { Settings, Bell, Shield, Moon, Sun, User, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+import { getAvatarPath } from "@/types/auth";
+import { calculateLevelAndProgress } from "@/lib/level-utils";
 import Link from "next/link";
 
 export default function SettingsPage() {
@@ -56,13 +59,17 @@ export default function SettingsPage() {
             </p>
           </div>
           <div className="p-5 flex items-center gap-4">
-            <div className="w-12 h-12 brand-gradient rounded-xl flex items-center justify-center text-white font-bold shadow-md shadow-pink-500/20">
-              {user.avatar}
-            </div>
+            <Image
+              src={getAvatarPath(user.role)}
+              alt={`${user.role} avatar`}
+              width={48}
+              height={48}
+              className="w-12 h-12 rounded-xl object-cover shadow-md shadow-pink-500/20"
+            />
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-foreground">{user.name}</p>
               <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-              <p className="text-xs text-primary font-semibold mt-0.5 capitalize">{user.role.toLowerCase()} · Level {user.level}</p>
+              <p className="text-xs text-primary font-semibold mt-0.5 capitalize">{user.role.toLowerCase()} · Level {calculateLevelAndProgress(user.xp).level}</p>
             </div>
             <Link href="/profile">
               <motion.button whileHover={{ scale: 1.02 }} className="text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors">

@@ -1,24 +1,41 @@
-export type CourseEnrollment = {
+// ─── Enrollment & Progress Types ─────────────────────
+
+import type { CourseStatus } from "./course";
+
+export interface EnrollmentData {
   id: number;
   userId: number;
   courseId: number;
-  status: "ACTIVE" | "COMPLETED" | "DROPPED";
-  enrolledAt: Date;
-  completedAt?: Date | null;
-};
+  status: CourseStatus;
+  progress: number;
+  enrolledAt: string;
+}
 
-export type CourseProgress = {
+export interface LessonProgressData {
   id: number;
   userId: number;
-  courseId: number;
-  status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
-  completionPercentage: number;
-  updatedAt: Date;
-};
+  lessonId: number;
+  completed: boolean;
+  completedAt: string | null;
+}
 
-export type StudentStats = {
+export interface EnrollmentListResponse {
+  enrollments: EnrollmentData[];
+}
+
+export interface EnrollCoursePayload {
+  courseId: number;
+}
+
+export interface CompleteLessonResponse {
+  progress: LessonProgressData;
+  enrollment: EnrollmentData;
+  xpAwarded: number;
+}
+
+export interface StudentStats {
   totalEnrollments: number;
   completedCourses: number;
   inProgressCourses: number;
   averageProgress: number;
-};
+}

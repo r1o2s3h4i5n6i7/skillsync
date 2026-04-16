@@ -1,0 +1,353 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum LessonType {
+  VIDEO
+  INTERACTIVE
+  TEXT
+  QUIZ
+}
+
+enum CourseStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum AssignmentStatus {
+  PENDING
+  SUBMITTED
+  GRADED
+}
+
+enum NotificationType {
+  MODULE_UNLOCKED
+  ACHIEVEMENT_EARNED
+  AI_RECOMMENDATION
+  QUIZ_COMPLETED
+  ENROLLMENT
+  ASSIGNMENT_GRADED
+  COURSE_PUBLISHED
+  STUDENT_ENROLLED
+  SYSTEM_ALERT
+  MEMBER_JOINED
+  ASSIGNMENT_SUBMITTED
+  NEW_COURSE_REVIEW
+  COURSE_UPDATED
+}
+
+// ─── USER ─────────────────────────────────────────────
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(STUDENT)
+  avatar    String   @default("")
+  city      String   @default("")
+  xp        Int      @default(0)
+  level     Int      @default(1)
+  streak    Int      @default(0)
+  coins     Int      @default(0)
+  joinedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  courses         Course[]
+  enrollments     Enrollment[]
+  lessonProgress  LessonProgress[]
+  quizAttempts    QuizAttempt[]
+  submissions     AssignmentSubmission[]
+  achievements    UserAchievement[]
+  notifications   Notification[]
+  dailyActivities DailyActivity[]
+  uploadedFiles   FileMeta[]
+  courseReviews   CourseReview[]
+
+  @@map("users")
+}
+
+// ─── COURSE ───────────────────────────────────────────
+
+model Course {
+  id           Int        @id @default(autoincrement())
+  title        String
+  description  String     @db.Text
+  subject      String
+  difficulty   Difficulty @default(EASY)
+  duration     String     @default("10 hours")
+  image        String     @default("/images/default-course.png")
+  rating       Float      @default(5.0)
+  isPublished  Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  instructorId Int
+  instructor   User       @relation(fields: [instructorId], references: [id])
+
+  lessons      Lesson[]
+  quizzes      Quiz[]
+  assignments  Assignment[]
+  enrollments  Enrollment[]
+  tags         CourseTag[]
+  reviews      CourseReview[]
+
+  @@map("courses")
+}
+
+model CourseTag {
+  id       Int    @id @default(autoincrement())
+  name     String
+  courseId  Int
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("course_tags")
+}
+
+// ─── LESSON ───────────────────────────────────────────
+
+model Lesson {
+  id         Int        @id @default(autoincrement())
+  courseId    Int
+  title      String
+  duration   String     @default("10m")
+  type       LessonType @default(INTERACTIVE)
+  xpReward   Int        @default(50)
+  orderIndex Int        @default(0)
+  content    Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress LessonProgress[]
+
+  @@map("lessons")
+}
+
+// ─── QUIZ ─────────────────────────────────────────────
+
+model Quiz {
+  id         Int        @id @default(autoincrement())
+  courseId    Int
+  title      String
+  difficulty Difficulty @default(EASY)
+  timeLimit  Int        @default(600)
+  xpReward   Int        @default(200)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  course    Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions Question[]
+  attempts  QuizAttempt[]
+
+  @@map("quizzes")
+}
+
+model Question {
+  id           Int    @id @default(autoincrement())
+  quizId       Int
+  text         String @db.Text
+  options      Json
+  correctIndex Int
+  explanation  String @db.Text
+  orderIndex   Int    @default(0)
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("questions")
+}
+
+// ─── ASSIGNMENT ───────────────────────────────────────
+
+model Assignment {
+  id          Int      @id @default(autoincrement())
+  courseId     Int
+  title       String
+  description String   @db.Text
+  dueDate     DateTime
+  maxScore    Int      @default(10)
+  xpReward    Int      @default(150)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course      Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  submissions AssignmentSubmission[]
+
+  @@map("assignments")
+}
+
+model AssignmentSubmission {
+  id           Int              @id @default(autoincrement())
+  assignmentId Int
+  userId       Int
+  status       AssignmentStatus @default(PENDING)
+  score        Int?
+  fileUrl      String?          // User uploaded assignment file path
+  submittedAt  DateTime?
+  gradedAt     DateTime?
+  createdAt    DateTime         @default(now())
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, userId])
+  @@map("assignment_submissions")
+}
+
+model FileMeta {
+  id         Int      @id @default(autoincrement())
+  fileName   String
+  filePath   String
+  fileSize   Int
+  mimeType   String
+  uploaderId Int
+  createdAt  DateTime @default(now())
+
+  uploader   User     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@map("file_metas")
+}
+
+// ─── ENROLLMENT & PROGRESS ────────────────────────────
+
+model Enrollment {
+  id         Int          @id @default(autoincrement())
+  userId     Int
+  courseId    Int
+  status     CourseStatus @default(NOT_STARTED)
+  progress   Int          @default(0)
+  enrolledAt DateTime     @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@map("enrollments")
+}
+
+model LessonProgress {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  lessonId    Int
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@map("lesson_progress")
+}
+
+model QuizAttempt {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  quizId    Int
+  score     Int
+  answers   Json
+  timeSpent Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_attempts")
+}
+
+// ─── GAMIFICATION ─────────────────────────────────────
+
+model Achievement {
+  id          Int    @id @default(autoincrement())
+  title       String
+  description String
+  icon        String @default("Star")
+  xpBonus     Int    @default(50)
+  forRole     Role   @default(STUDENT)
+
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  achievementId Int
+  earnedAt      DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  icon      String           @default("Bell")
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// ─── ANALYTICS ────────────────────────────────────────
+
+model DailyActivity {
+  id      Int      @id @default(autoincrement())
+  userId  Int
+  date    DateTime @db.Date
+  xp      Int      @default(0)
+  lessons Int      @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("daily_activities")
+}
+
+model CourseReview {
+  id        Int      @id @default(autoincrement())
+  rating    Int      @default(5)
+  comment   String   @db.Text
+  userId    Int
+  courseId  Int
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
+  @@map("course_reviews")
+}

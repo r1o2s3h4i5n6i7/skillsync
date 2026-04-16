@@ -33,9 +33,12 @@ export default function SignIn() {
     setLoading(false);
     if (success) {
       toast.success("Welcome back! Redirecting…");
-      const storedUser = JSON.parse(localStorage.getItem("intellixlearn_user") || "{}");
-      if (storedUser.role === "TEACHER") router.push("/dashboard/teacher");
-      else if (storedUser.role === "ADMIN") router.push("/dashboard/admin");
+      // Fetch fresh session to determine role for redirect
+      const meRes = await fetch("/api/auth/me");
+      const meData: { user: { role: string } | null } = await meRes.json();
+      const role = meData.user?.role;
+      if (role === "TEACHER") router.push("/dashboard/teacher");
+      else if (role === "ADMIN") router.push("/dashboard/admin");
       else router.push("/dashboard/student");
     } else {
       toast.error("Invalid email or password. Try a demo account below.");

@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
 import { useCourses } from "@/lib/course-context";
-import { STUDENT_ENROLLED_IDS } from "@/lib/demo-data";
 import { 
   ArrowLeft, Orbit, Clock, Trophy, CheckCircle2, XCircle, GraduationCap,
   ChevronRight, Zap, RotateCcw, Star, Lock, X, Eye, BookOpen, TrendingUp, Plus, AlertCircle, Shield, Target
@@ -24,19 +23,9 @@ export default function QuizzesPage() {
   const { getCourse, getCourseQuizzes, enrolledIds } = useCourses();
   const params = useParams();
   
-  if (!user) return null;
-  
   const courseId = Number(params.courseId);
   const course = getCourse(courseId);
   const quizzes = getCourseQuizzes(courseId);
-  
-  // Check enrollment for students
-  const isEnrolled = user?.role === "STUDENT" ? enrolledIds.includes(courseId) : true;
-  const canAccess = user?.role !== "STUDENT" || isEnrolled;
-
-  const isInstructor = user?.role === "TEACHER" && course?.instructorId === user?.id;
-  const isAdmin = user?.role === "ADMIN";
-  const shouldHideStudentActions = isAdmin || isInstructor;
 
   // Quiz state
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
@@ -56,6 +45,16 @@ export default function QuizzesPage() {
     }, 1000);
     return () => clearInterval(timer);
   }, [activeQuiz?.id, showResult, isReviewing]);
+
+  if (!user) return null;
+
+  // Check enrollment for students
+  const isEnrolled = user?.role === "STUDENT" ? enrolledIds.includes(courseId) : true;
+  const canAccess = user?.role !== "STUDENT" || isEnrolled;
+
+  const isInstructor = user?.role === "TEACHER" && course?.instructorId === user?.id;
+  const isAdmin = user?.role === "ADMIN";
+  const shouldHideStudentActions = isAdmin || isInstructor;
 
   const startQuiz = (quiz: any) => {
     setActiveQuiz(quiz);
