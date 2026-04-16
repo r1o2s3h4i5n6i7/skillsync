@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     await advanceLevelAndStreak(course.instructorId, 10);
     await createNotification({
       userId: course.instructorId,
-      type: "COURSE",
+      type: "STUDENT_ENROLLED",
       title: "New Student Enrolled!",
       message: `A new student enrolled in your course: ${course.title}`,
       icon: "TrendingUp"
